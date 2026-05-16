@@ -351,7 +351,9 @@ struct AppShortcutsTests {
       id: "settings",
       title: "Open Settings",
       subtitle: nil,
-      kind: .openSettings
+      kind: .openSettings,
+      category: .app,
+      defaultSuggestion: false
     )
     expectNoDifference(paletteItem.appShortcutLabel(in: resolved), "⌘;")
 
@@ -381,7 +383,9 @@ struct AppShortcutsTests {
       id: "settings",
       title: "Open Settings",
       subtitle: nil,
-      kind: .openSettings
+      kind: .openSettings,
+      category: .app,
+      defaultSuggestion: false
     )
     #expect(paletteItem.appShortcutLabel(in: resolved) == nil)
 
@@ -440,7 +444,9 @@ struct AppShortcutsTests {
       id: "settings",
       title: "Open Settings",
       subtitle: nil,
-      kind: .openSettings
+      kind: .openSettings,
+      category: .app,
+      defaultSuggestion: false
     )
     expectNoDifference(paletteItem.appShortcutLabel(in: resolved), "⌘1")
 

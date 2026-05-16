@@ -248,13 +248,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func emptyQueryHidesGhosttyCommands() {
-    let ghosttyItem = CommandPaletteItem(
+    let ghosttyItem = makeItem(
       id: "ghostty.goto_split:right|Focus Split Right",
       title: "Focus Split Right",
       subtitle: nil,
       kind: .ghosttyCommand("goto_split:right")
     )
-    let prAction = CommandPaletteItem(
+    let prAction = makeItem(
       id: "pr.open",
       title: "Open PR on GitHub",
       subtitle: "PR title",
@@ -466,31 +466,31 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func showsGlobalItemsWhenQueryEmpty() {
-    let openSettings = CommandPaletteItem(
+    let openSettings = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
       subtitle: nil,
       kind: .openSettings
     )
-    let newWorktree = CommandPaletteItem(
+    let newWorktree = makeItem(
       id: "global.new-worktree",
       title: "New Worktree",
       subtitle: nil,
       kind: .newWorktree
     )
-    let selectFox = CommandPaletteItem(
+    let selectFox = makeItem(
       id: "worktree.fox.select",
       title: "Repo / fox",
       subtitle: "main",
       kind: .worktreeSelect("wt-fox")
     )
-    let archiveFox = CommandPaletteItem(
+    let archiveFox = makeItem(
       id: "worktree.fox.archive",
       title: "Repo / fox",
       subtitle: "Archive Worktree - main",
       kind: .archiveWorktree("wt-fox", "repo-fox")
     )
-    let removeFox = CommandPaletteItem(
+    let removeFox = makeItem(
       id: "worktree.fox.remove",
       title: "Repo / fox",
       subtitle: "Remove Worktree - main",
@@ -521,13 +521,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func queryRanksByFuzzyScoreAcrossAllItems() {
-    let openSettings = CommandPaletteItem(
+    let openSettings = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
       subtitle: nil,
       kind: .openSettings
     )
-    let selectSettings = CommandPaletteItem(
+    let selectSettings = makeItem(
       id: "worktree.settings.select",
       title: "Repo / settings",
       subtitle: "main",
@@ -541,13 +541,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyRanksPrefixAndShorterLabelFirst() {
-    let short = CommandPaletteItem(
+    let short = makeItem(
       id: "worktree.set.select",
       title: "Set",
       subtitle: nil,
       kind: .worktreeSelect("wt-set")
     )
-    let long = CommandPaletteItem(
+    let long = makeItem(
       id: "worktree.settings.select",
       title: "Settings",
       subtitle: nil,
@@ -561,7 +561,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesSubtitleWhenLabelDoesNot() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "worktree.fox.select",
       title: "Repo / fox",
       subtitle: "main",
@@ -575,7 +575,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesMultiplePieces() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "worktree.fox.select",
       title: "Repo / fox",
       subtitle: "main",
@@ -730,13 +730,13 @@ struct CommandPaletteFeatureTests {
 
   @Test func recencyBreaksFuzzyTiesWithinGroup() {
     let now = Date(timeIntervalSince1970: 1_000_000)
-    let recent = CommandPaletteItem(
+    let recent = makeItem(
       id: "global.recent",
       title: "Open",
       subtitle: nil,
       kind: .openRepository
     )
-    let older = CommandPaletteItem(
+    let older = makeItem(
       id: "global.older",
       title: "Open",
       subtitle: nil,
@@ -759,13 +759,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func supacodeItemsBeatGhosttyItemsWhenScoresTie() {
-    let supacodeItem = CommandPaletteItem(
+    let supacodeItem = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
       subtitle: nil,
       kind: .openSettings
     )
-    let ghosttyItem = CommandPaletteItem(
+    let ghosttyItem = makeItem(
       id: "ghostty.open-settings|Open Settings",
       title: "Open Settings",
       subtitle: nil,
@@ -785,13 +785,13 @@ struct CommandPaletteFeatureTests {
   // MARK: - Unified Ranking Tests
 
   @Test func worktreeOutranksGlobalWhenBetterMatch() {
-    let checkForUpdates = CommandPaletteItem(
+    let checkForUpdates = makeItem(
       id: "global.check-for-updates",
       title: "Check for Updates",
       subtitle: nil,
       kind: .checkForUpdates
     )
-    let worktreeFox = CommandPaletteItem(
+    let worktreeFox = makeItem(
       id: "worktree.fox.select",
       title: "Repo / fox",
       subtitle: nil,
@@ -805,13 +805,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func worktreeExactPrefixOutranksGlobalSubstringMatch() {
-    let openSettings = CommandPaletteItem(
+    let openSettings = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
       subtitle: nil,
       kind: .openSettings
     )
-    let worktreeOpen = CommandPaletteItem(
+    let worktreeOpen = makeItem(
       id: "worktree.open.select",
       title: "open",
       subtitle: nil,
@@ -826,19 +826,19 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func globalAndWorktreeItemsInterleavedByScore() {
-    let openRepo = CommandPaletteItem(
+    let openRepo = makeItem(
       id: "global.open-repository",
       title: "Open Repository",
       subtitle: nil,
       kind: .openRepository
     )
-    let worktreeRepo = CommandPaletteItem(
+    let worktreeRepo = makeItem(
       id: "worktree.repo.select",
       title: "repo",
       subtitle: nil,
       kind: .worktreeSelect("wt-repo")
     )
-    let refreshWorktrees = CommandPaletteItem(
+    let refreshWorktrees = makeItem(
       id: "global.refresh-worktrees",
       title: "Refresh Worktrees",
       subtitle: nil,
@@ -856,13 +856,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func nonMatchingItemsExcludedRegardlessOfType() {
-    let checkForUpdates = CommandPaletteItem(
+    let checkForUpdates = makeItem(
       id: "global.check-for-updates",
       title: "Check for Updates",
       subtitle: nil,
       kind: .checkForUpdates
     )
-    let worktreeFox = CommandPaletteItem(
+    let worktreeFox = makeItem(
       id: "worktree.fox.select",
       title: "Repo / fox",
       subtitle: nil,
@@ -876,19 +876,19 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func multipleWorktreesCanAppearBeforeGlobalItems() {
-    let openSettings = CommandPaletteItem(
+    let openSettings = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
       subtitle: nil,
       kind: .openSettings
     )
-    let worktreeAlpha = CommandPaletteItem(
+    let worktreeAlpha = makeItem(
       id: "worktree.alpha.select",
       title: "set",
       subtitle: nil,
       kind: .worktreeSelect("wt-alpha")
     )
-    let worktreeBeta = CommandPaletteItem(
+    let worktreeBeta = makeItem(
       id: "worktree.beta.select",
       title: "sett",
       subtitle: nil,
@@ -906,14 +906,14 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func priorityTierBreaksTiesAcrossItemTypes() {
-    let prAction = CommandPaletteItem(
+    let prAction = makeItem(
       id: "pr.merge",
       title: "Merge PR",
       subtitle: "Ready",
       kind: .mergePullRequest("wt-1"),
       priorityTier: 0
     )
-    let worktreeMerge = CommandPaletteItem(
+    let worktreeMerge = makeItem(
       id: "worktree.merge.select",
       title: "Merge",
       subtitle: nil,
@@ -933,13 +933,13 @@ struct CommandPaletteFeatureTests {
 
   @Test func recencyBreaksTiesAcrossItemTypes() {
     let now = Date(timeIntervalSince1970: 1_000_000)
-    let globalItem = CommandPaletteItem(
+    let globalItem = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
       subtitle: nil,
       kind: .openSettings
     )
-    let worktreeItem = CommandPaletteItem(
+    let worktreeItem = makeItem(
       id: "worktree.settings.select",
       title: "Repo / settings",
       subtitle: nil,
@@ -961,13 +961,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func worktreeWithLabelMatchOutranksGlobalWithDescriptionMatch() {
-    let globalItem = CommandPaletteItem(
+    let globalItem = makeItem(
       id: "global.pr.open",
       title: "Open PR on GitHub",
       subtitle: "deploy-fixes",
       kind: .openPullRequest("wt-1")
     )
-    let worktreeItem = CommandPaletteItem(
+    let worktreeItem = makeItem(
       id: "worktree.deploy.select",
       title: "Repo / deploy-fixes",
       subtitle: nil,
@@ -983,13 +983,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func shorterWorktreeLabelWinsOverLongerGlobalLabel() {
-    let globalItem = CommandPaletteItem(
+    let globalItem = makeItem(
       id: "global.new-worktree",
       title: "New Worktree",
       subtitle: nil,
       kind: .newWorktree
     )
-    let worktreeItem = CommandPaletteItem(
+    let worktreeItem = makeItem(
       id: "worktree.new.select",
       title: "new",
       subtitle: nil,
@@ -1005,19 +1005,19 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func emptyQueryStillHidesRootActionsAndWorktrees() {
-    let checkForUpdates = CommandPaletteItem(
+    let checkForUpdates = makeItem(
       id: "global.check-for-updates",
       title: "Check for Updates",
       subtitle: nil,
       kind: .checkForUpdates
     )
-    let worktreeFox = CommandPaletteItem(
+    let worktreeFox = makeItem(
       id: "worktree.fox.select",
       title: "Repo / fox",
       subtitle: nil,
       kind: .worktreeSelect("wt-fox")
     )
-    let prAction = CommandPaletteItem(
+    let prAction = makeItem(
       id: "pr.open",
       title: "Open PR on GitHub",
       subtitle: "PR title",
@@ -1036,13 +1036,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func whitespaceOnlyQueryTreatedAsEmpty() {
-    let checkForUpdates = CommandPaletteItem(
+    let checkForUpdates = makeItem(
       id: "global.check-for-updates",
       title: "Check for Updates",
       subtitle: nil,
       kind: .checkForUpdates
     )
-    let worktreeFox = CommandPaletteItem(
+    let worktreeFox = makeItem(
       id: "worktree.fox.select",
       title: "Repo / fox",
       subtitle: nil,
@@ -1062,13 +1062,13 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func inputOrderDoesNotAffectScoreBasedRanking() {
-    let globalItem = CommandPaletteItem(
+    let globalItem = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
       subtitle: nil,
       kind: .openSettings
     )
-    let worktreeItem = CommandPaletteItem(
+    let worktreeItem = makeItem(
       id: "worktree.open.select",
       title: "open",
       subtitle: nil,
@@ -1092,7 +1092,7 @@ struct CommandPaletteFeatureTests {
     state.isPresented = true
     state.query = "bear"
     state.selectedIndex = 1
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "global.open-repository",
       title: "Open Repository",
       subtitle: nil,
@@ -1115,7 +1115,7 @@ struct CommandPaletteFeatureTests {
 
   @Test func activateGhosttyCommandDispatchesDelegate() async {
     let now = Date(timeIntervalSince1970: 7_654_321)
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "ghostty.goto_split:right|Focus Split Right",
       title: "Focus Split Right",
       subtitle: nil,
@@ -1168,6 +1168,63 @@ private func makeRepository(
     kind: kind,
     worktrees: IdentifiedArray(uniqueElements: worktrees)
   )
+}
+
+private func makeItem(
+  id: String,
+  title: String,
+  subtitle: String?,
+  kind: CommandPaletteItem.Kind,
+  priorityTier: Int = CommandPaletteItem.defaultPriorityTier
+) -> CommandPaletteItem {
+  CommandPaletteItem(
+    id: id,
+    title: title,
+    subtitle: subtitle,
+    kind: kind,
+    category: testCategory(for: kind),
+    defaultSuggestion: testDefaultSuggestion(for: kind),
+    priorityTier: priorityTier
+  )
+}
+
+private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteItem.Category {
+  switch kind {
+  case .checkForUpdates, .openSettings, .openRepository, .installCLI:
+    return .app
+  case .newWorktree, .refreshWorktrees, .viewArchivedWorktrees,
+    .removeWorktree, .archiveWorktree, .changeFocusedTabIcon:
+    return .worktree
+  case .jumpToLatestUnread, .worktreeSelect:
+    return .navigation
+  case .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady,
+    .mergePullRequest, .closePullRequest, .copyFailingJobURL, .copyCiFailureLogs,
+    .rerunFailedJobs, .openFailingCheckDetails:
+    return .pullRequest
+  case .ghosttyCommand:
+    return .terminal
+  #if DEBUG
+    case .debugTestToast, .debugSimulateUpdateFound:
+      return .debug
+  #endif
+  }
+}
+
+private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
+  switch kind {
+  case .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest,
+    .copyFailingJobURL, .copyCiFailureLogs, .rerunFailedJobs, .openFailingCheckDetails:
+    return true
+  case .checkForUpdates, .openSettings, .openRepository, .installCLI,
+    .newWorktree, .refreshWorktrees, .viewArchivedWorktrees, .jumpToLatestUnread,
+    .worktreeSelect, .removeWorktree, .archiveWorktree, .changeFocusedTabIcon,
+    .ghosttyCommand, .openRepositoryOnCodeHost:
+    return false
+  #if DEBUG
+    case .debugTestToast, .debugSimulateUpdateFound:
+      return true
+  #endif
+  }
 }
 
 private func makePullRequest(

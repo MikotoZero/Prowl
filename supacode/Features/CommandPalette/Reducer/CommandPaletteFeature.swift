@@ -156,9 +156,8 @@ struct CommandPaletteFeature {
     now: Date = .now
   ) -> [CommandPaletteItem] {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let globalItems = items.filter(\.isGlobal)
     guard !trimmed.isEmpty else {
-      let visibleItems = globalItems.filter { !$0.isRootAction }
+      let visibleItems = items.filter(\.defaultSuggestion)
       return prioritizeItems(items: visibleItems, recencyByID: recencyByID, now: now)
     }
     let scorer = CommandPaletteFuzzyScorer(query: trimmed, recencyByID: recencyByID, now: now)
@@ -172,75 +171,16 @@ struct CommandPaletteFeature {
     let showsNewWorktreeAction =
       repositories.repositories.isEmpty
       || repositories.repositories.contains { $0.capabilities.supportsWorktrees }
-    var items: [CommandPaletteItem] = [
-      CommandPaletteItem(
-        id: CommandPaletteItemID.globalCheckForUpdates,
-        title: "Check for Updates",
-        subtitle: nil,
-        kind: .checkForUpdates
-      ),
-      CommandPaletteItem(
-        id: CommandPaletteItemID.globalOpenSettings,
-        title: "Open Settings",
-        subtitle: nil,
-        kind: .openSettings
-      ),
-      CommandPaletteItem(
-        id: CommandPaletteItemID.globalOpenRepository,
-        title: "Open Repository",
-        subtitle: nil,
-        kind: .openRepository
-      ),
-    ]
-    if showsNewWorktreeAction {
-      items.append(
-        CommandPaletteItem(
-          id: CommandPaletteItemID.globalNewWorktree,
-          title: "New Worktree",
-          subtitle: nil,
-          kind: .newWorktree
-        )
-      )
-    }
-    items.append(
-      CommandPaletteItem(
-        id: CommandPaletteItemID.globalRefreshWorktrees,
-        title: "Refresh Worktrees",
-        subtitle: nil,
-        kind: .refreshWorktrees
-      )
-    )
-    items.append(
-      CommandPaletteItem(
-        id: CommandPaletteItemID.globalJumpToLatestUnread,
-        title: "Jump to Latest Unread",
-        subtitle: nil,
-        kind: .jumpToLatestUnread
-      )
-    )
-    items.append(
-      CommandPaletteItem(
-        id: CommandPaletteItemID.globalViewArchivedWorktrees,
-        title: "View Archived Worktrees",
-        subtitle: nil,
-        kind: .viewArchivedWorktrees
-      )
-    )
-    items.append(
-      CommandPaletteItem(
-        id: CommandPaletteItemID.globalInstallCLI,
-        title: "Install Command Line Tool",
-        subtitle: nil,
-        kind: .installCLI
-      )
-    )
+    var items = globalCommandItems(showsNewWorktreeAction: showsNewWorktreeAction)
     if let terminalWorktree = repositories.selectedTerminalWorktree {
       items.append(
         CommandPaletteItem(
           id: CommandPaletteItemID.changeFocusedTabIcon(terminalWorktree.id),
           title: "Change Tab Icon...",
           subtitle: terminalWorktree.name,
-          kind: .changeFocusedTabIcon(terminalWorktree.id)
+          kind: .changeFocusedTabIcon(terminalWorktree.id),
+          category: .worktree,
+          defaultSuggestion: false
         )
       )
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
@@ -258,7 +198,9 @@ struct CommandPaletteFeature {
           id: CommandPaletteItemID.worktreeSelect(row.id),
           title: title,
           subtitle: nil,
-          kind: .worktreeSelect(row.id)
+          kind: .worktreeSelect(row.id),
+          category: .navigation,
+          defaultSuggestion: false
         )
       )
     }
@@ -278,6 +220,88 @@ struct CommandPaletteFeature {
     }
     return ids
   }
+}
+
+private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPaletteItem] {
+  var items: [CommandPaletteItem] = [
+    CommandPaletteItem(
+      id: CommandPaletteItemID.globalCheckForUpdates,
+      title: "Check for Updates",
+      subtitle: nil,
+      kind: .checkForUpdates,
+      category: .app,
+      defaultSuggestion: false
+    ),
+    CommandPaletteItem(
+      id: CommandPaletteItemID.globalOpenSettings,
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings,
+      category: .app,
+      defaultSuggestion: false
+    ),
+    CommandPaletteItem(
+      id: CommandPaletteItemID.globalOpenRepository,
+      title: "Open Repository",
+      subtitle: nil,
+      kind: .openRepository,
+      category: .app,
+      defaultSuggestion: false
+    ),
+  ]
+  if showsNewWorktreeAction {
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.globalNewWorktree,
+        title: "New Worktree",
+        subtitle: nil,
+        kind: .newWorktree,
+        category: .worktree,
+        defaultSuggestion: false
+      )
+    )
+  }
+  items.append(
+    CommandPaletteItem(
+      id: CommandPaletteItemID.globalRefreshWorktrees,
+      title: "Refresh Worktrees",
+      subtitle: nil,
+      kind: .refreshWorktrees,
+      category: .worktree,
+      defaultSuggestion: false
+    )
+  )
+  items.append(
+    CommandPaletteItem(
+      id: CommandPaletteItemID.globalJumpToLatestUnread,
+      title: "Jump to Latest Unread",
+      subtitle: nil,
+      kind: .jumpToLatestUnread,
+      category: .navigation,
+      defaultSuggestion: false
+    )
+  )
+  items.append(
+    CommandPaletteItem(
+      id: CommandPaletteItemID.globalViewArchivedWorktrees,
+      title: "View Archived Worktrees",
+      subtitle: nil,
+      kind: .viewArchivedWorktrees,
+      category: .worktree,
+      defaultSuggestion: false
+    )
+  )
+  items.append(
+    CommandPaletteItem(
+      id: CommandPaletteItemID.globalInstallCLI,
+      title: "Install Command Line Tool",
+      subtitle: nil,
+      kind: .installCLI,
+      category: .app,
+      defaultSuggestion: false
+    )
+  )
+  return items
 }
 
 private func selectedCodeHostItems(
@@ -316,6 +340,8 @@ private func selectedCodeHostItems(
       title: "Open Repository on \(codeHost.displayName)",
       subtitle: repository.name,
       kind: .openRepositoryOnCodeHost(selectedWorktreeID),
+      category: .pullRequest,
+      defaultSuggestion: false,
       priorityTier: 2
     )
   ]
@@ -327,74 +353,10 @@ private func pullRequestItems(
   repositoryID: Repository.ID,
   codeHost: CodeHost
 ) -> [CommandPaletteItem] {
-  let state = pullRequest.state.uppercased()
-  let isOpen = state == "OPEN"
-  let isDraft = pullRequest.isDraft
+  let isOpen = pullRequest.state.uppercased() == "OPEN"
   let mergeReadiness = PullRequestMergeReadiness(pullRequest: pullRequest)
-  let checks = pullRequest.statusCheckRollup?.checks ?? []
-  let breakdown = PullRequestCheckBreakdown(checks: checks)
-  let hasFailingChecks = breakdown.failed > 0
-  let canMerge = isOpen && !isDraft && !mergeReadiness.isBlocking
-
-  func makeReadyItem() -> CommandPaletteItem? {
-    guard isOpen && isDraft else { return nil }
-    return CommandPaletteItem(
-      id: CommandPaletteItemID.pullRequestReady(repositoryID),
-      title: "Mark PR Ready for Review",
-      subtitle: pullRequest.title,
-      kind: .markPullRequestReady(worktreeID),
-      priorityTier: 0
-    )
-  }
-
-  func makeFailingItems() -> [CommandPaletteItem] {
-    guard isOpen && hasFailingChecks else { return [] }
-    let hasFailingCheckWithDetails = checks.contains { $0.checkState == .failure && $0.detailsUrl != nil }
-    let leadingTier = isDraft ? 1 : 0
-    let followupTier = leadingTier + 1
-    var failingItems: [CommandPaletteItem] = []
-    if hasFailingCheckWithDetails {
-      failingItems.append(
-        CommandPaletteItem(
-          id: CommandPaletteItemID.pullRequestCopyFailingJobURL(repositoryID),
-          title: "Copy failing job URL",
-          subtitle: pullRequest.title,
-          kind: .copyFailingJobURL(worktreeID),
-          priorityTier: leadingTier
-        )
-      )
-    }
-    failingItems.append(
-      CommandPaletteItem(
-        id: CommandPaletteItemID.pullRequestCopyCiLogs(repositoryID),
-        title: "Copy CI Failure Logs",
-        subtitle: pullRequest.title,
-        kind: .copyCiFailureLogs(worktreeID),
-        priorityTier: hasFailingCheckWithDetails ? followupTier : leadingTier
-      )
-    )
-    failingItems.append(
-      CommandPaletteItem(
-        id: CommandPaletteItemID.pullRequestRerunFailedJobs(repositoryID),
-        title: "Re-run Failed Jobs",
-        subtitle: pullRequest.title,
-        kind: .rerunFailedJobs(worktreeID),
-        priorityTier: followupTier
-      )
-    )
-    if hasFailingCheckWithDetails {
-      failingItems.append(
-        CommandPaletteItem(
-          id: CommandPaletteItemID.pullRequestOpenFailingCheck(repositoryID),
-          title: "Open Failing Check Details",
-          subtitle: pullRequest.title,
-          kind: .openFailingCheckDetails(worktreeID),
-          priorityTier: followupTier
-        )
-      )
-    }
-    return failingItems
-  }
+  let breakdown = PullRequestCheckBreakdown(checks: pullRequest.statusCheckRollup?.checks ?? [])
+  let canMerge = isOpen && !pullRequest.isDraft && !mergeReadiness.isBlocking
 
   var items: [CommandPaletteItem] = [
     CommandPaletteItem(
@@ -402,15 +364,27 @@ private func pullRequestItems(
       title: "Open Pull Request on \(codeHost.displayName)",
       subtitle: pullRequest.title,
       kind: .openPullRequest(worktreeID),
+      category: .pullRequest,
+      defaultSuggestion: true,
       priorityTier: 2
     )
   ]
 
-  if let readyItem = makeReadyItem() {
+  if let readyItem = makeReadyPullRequestItem(
+    pullRequest: pullRequest,
+    repositoryID: repositoryID,
+    worktreeID: worktreeID
+  ) {
     items.append(readyItem)
   }
 
-  items.append(contentsOf: makeFailingItems())
+  items.append(
+    contentsOf: makeFailingPullRequestItems(
+      pullRequest: pullRequest,
+      repositoryID: repositoryID,
+      worktreeID: worktreeID
+    )
+  )
 
   if let mergeItem = makeMergePullRequestItem(
     canMerge: canMerge,
@@ -433,6 +407,88 @@ private func pullRequestItems(
   return items
 }
 
+private func makeReadyPullRequestItem(
+  pullRequest: GithubPullRequest,
+  repositoryID: Repository.ID,
+  worktreeID: Worktree.ID
+) -> CommandPaletteItem? {
+  let isOpen = pullRequest.state.uppercased() == "OPEN"
+  guard isOpen && pullRequest.isDraft else { return nil }
+  return CommandPaletteItem(
+    id: CommandPaletteItemID.pullRequestReady(repositoryID),
+    title: "Mark PR Ready for Review",
+    subtitle: pullRequest.title,
+    kind: .markPullRequestReady(worktreeID),
+    category: .pullRequest,
+    defaultSuggestion: true,
+    priorityTier: 0
+  )
+}
+
+private func makeFailingPullRequestItems(
+  pullRequest: GithubPullRequest,
+  repositoryID: Repository.ID,
+  worktreeID: Worktree.ID
+) -> [CommandPaletteItem] {
+  let isOpen = pullRequest.state.uppercased() == "OPEN"
+  let checks = pullRequest.statusCheckRollup?.checks ?? []
+  let hasFailingChecks = PullRequestCheckBreakdown(checks: checks).failed > 0
+  guard isOpen && hasFailingChecks else { return [] }
+  let hasFailingCheckWithDetails = checks.contains { $0.checkState == .failure && $0.detailsUrl != nil }
+  let leadingTier = pullRequest.isDraft ? 1 : 0
+  let followupTier = leadingTier + 1
+  var failingItems: [CommandPaletteItem] = []
+  if hasFailingCheckWithDetails {
+    failingItems.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.pullRequestCopyFailingJobURL(repositoryID),
+        title: "Copy failing job URL",
+        subtitle: pullRequest.title,
+        kind: .copyFailingJobURL(worktreeID),
+        category: .pullRequest,
+        defaultSuggestion: true,
+        priorityTier: leadingTier
+      )
+    )
+  }
+  failingItems.append(
+    CommandPaletteItem(
+      id: CommandPaletteItemID.pullRequestCopyCiLogs(repositoryID),
+      title: "Copy CI Failure Logs",
+      subtitle: pullRequest.title,
+      kind: .copyCiFailureLogs(worktreeID),
+      category: .pullRequest,
+      defaultSuggestion: true,
+      priorityTier: hasFailingCheckWithDetails ? followupTier : leadingTier
+    )
+  )
+  failingItems.append(
+    CommandPaletteItem(
+      id: CommandPaletteItemID.pullRequestRerunFailedJobs(repositoryID),
+      title: "Re-run Failed Jobs",
+      subtitle: pullRequest.title,
+      kind: .rerunFailedJobs(worktreeID),
+      category: .pullRequest,
+      defaultSuggestion: true,
+      priorityTier: followupTier
+    )
+  )
+  if hasFailingCheckWithDetails {
+    failingItems.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.pullRequestOpenFailingCheck(repositoryID),
+        title: "Open Failing Check Details",
+        subtitle: pullRequest.title,
+        kind: .openFailingCheckDetails(worktreeID),
+        category: .pullRequest,
+        defaultSuggestion: true,
+        priorityTier: followupTier
+      )
+    )
+  }
+  return failingItems
+}
+
 private func makeMergePullRequestItem(
   canMerge: Bool,
   breakdown: PullRequestCheckBreakdown,
@@ -450,6 +506,8 @@ private func makeMergePullRequestItem(
     title: "Merge PR",
     subtitle: "Merge Ready - \(successfulChecksLabel)",
     kind: .mergePullRequest(worktreeID),
+    category: .pullRequest,
+    defaultSuggestion: true,
     priorityTier: 0
   )
 }
@@ -466,6 +524,8 @@ private func makeClosePullRequestItem(
     title: "Close PR",
     subtitle: pullRequestTitle,
     kind: .closePullRequest(worktreeID),
+    category: .pullRequest,
+    defaultSuggestion: true,
     priorityTier: 1
   )
 }
@@ -477,19 +537,25 @@ private func makeClosePullRequestItem(
         id: "debug.toast.inProgress",
         title: "[Debug] Toast: In Progress",
         subtitle: "Simulates an in-progress toast",
-        kind: .debugTestToast(.inProgress("Merging pull request…"))
+        kind: .debugTestToast(.inProgress("Merging pull request…")),
+        category: .debug,
+        defaultSuggestion: true
       ),
       CommandPaletteItem(
         id: "debug.toast.success",
         title: "[Debug] Toast: Success",
         subtitle: "Simulates a success toast",
-        kind: .debugTestToast(.success("Pull request merged"))
+        kind: .debugTestToast(.success("Pull request merged")),
+        category: .debug,
+        defaultSuggestion: true
       ),
       CommandPaletteItem(
         id: "debug.update.simulate-found",
         title: "[Debug] Simulate Update Found",
         subtitle: "Shows the toolbar update badge without querying Sparkle",
-        kind: .debugSimulateUpdateFound
+        kind: .debugSimulateUpdateFound,
+        category: .debug,
+        defaultSuggestion: true
       ),
     ]
   }
@@ -743,6 +809,8 @@ private func ghosttyCommandItems(_ commands: [GhosttyCommand]) -> [CommandPalett
       title: command.title,
       subtitle: subtitle.isEmpty ? nil : subtitle,
       kind: .ghosttyCommand(command.action),
+      category: .terminal,
+      defaultSuggestion: false,
       priorityTier: CommandPaletteItem.defaultPriorityTier + 100
     )
   }
