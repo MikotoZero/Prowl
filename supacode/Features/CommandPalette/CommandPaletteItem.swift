@@ -6,18 +6,27 @@ struct CommandPaletteItem: Identifiable, Equatable {
   let subtitle: String?
   let kind: Kind
   let priorityTier: Int
+  let category: Category
+  let keywords: [String]
+  let defaultSuggestion: Bool
 
   init(
     id: String,
     title: String,
     subtitle: String?,
     kind: Kind,
+    category: Category,
+    defaultSuggestion: Bool,
+    keywords: [String] = [],
     priorityTier: Int = defaultPriorityTier
   ) {
     self.id = id
     self.title = title
     self.subtitle = subtitle
     self.kind = kind
+    self.category = category
+    self.defaultSuggestion = defaultSuggestion
+    self.keywords = keywords
     self.priorityTier = priorityTier
   }
 
@@ -50,61 +59,16 @@ struct CommandPaletteItem: Identifiable, Equatable {
     #endif
   }
 
-  var isGlobal: Bool {
-    switch kind {
-    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI, .jumpToLatestUnread:
-      return true
-    case .ghosttyCommand:
-      return false
-    case .openPullRequest,
-      .markPullRequestReady,
-      .mergePullRequest,
-      .closePullRequest,
-      .copyFailingJobURL,
-      .copyCiFailureLogs,
-      .rerunFailedJobs,
-      .openFailingCheckDetails:
-      return true
-    case .worktreeSelect,
-      .removeWorktree,
-      .archiveWorktree,
-      .changeFocusedTabIcon,
-      .openRepositoryOnCodeHost:
-      return false
+  enum Category: String, CaseIterable, Equatable {
+    case view
+    case navigation
+    case worktree
+    case pullRequest
+    case terminal
+    case app
     #if DEBUG
-      case .debugTestToast, .debugSimulateUpdateFound:
-        return true
+      case debug
     #endif
-    }
-  }
-
-  var isRootAction: Bool {
-    switch kind {
-    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI, .jumpToLatestUnread:
-      return true
-    case .ghosttyCommand:
-      return false
-    case .openPullRequest,
-      .openRepositoryOnCodeHost,
-      .markPullRequestReady,
-      .mergePullRequest,
-      .closePullRequest,
-      .copyFailingJobURL,
-      .copyCiFailureLogs,
-      .rerunFailedJobs,
-      .openFailingCheckDetails,
-      .worktreeSelect,
-      .removeWorktree,
-      .archiveWorktree,
-      .changeFocusedTabIcon:
-      return false
-    #if DEBUG
-      case .debugTestToast, .debugSimulateUpdateFound:
-        return false
-    #endif
-    }
   }
 
   var appShortcutCommandID: String? {
