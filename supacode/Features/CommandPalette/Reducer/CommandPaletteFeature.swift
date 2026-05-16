@@ -149,6 +149,42 @@ struct CommandPaletteFeature {
     }
   }
 
+  static func suggestions(
+    items: [CommandPaletteItem],
+    recencyByID: [CommandPaletteItem.ID: TimeInterval] = [:],
+    now: Date = .now
+  ) -> CommandPaletteSuggestions {
+    let recencyScored: [(item: CommandPaletteItem, score: Double)] = items.compactMap { item in
+      let score = commandPaletteRecencyScore(item, recencyByID: recencyByID, now: now)
+      return score > 0 ? (item, score) : nil
+    }
+    let recent = Array(
+      recencyScored
+        .sorted { $0.score > $1.score }
+        .prefix(CommandPaletteSuggestions.maxItems)
+        .map(\.item)
+    )
+
+    let recentIDs = Set(recent.map(\.id))
+    let suggestedCandidates = items.enumerated().compactMap { idx, item -> (item: CommandPaletteItem, idx: Int)? in
+      guard item.defaultSuggestion, !recentIDs.contains(item.id) else { return nil }
+      return (item, idx)
+    }
+    let suggested = Array(
+      suggestedCandidates
+        .sorted { left, right in
+          if left.item.priorityTier != right.item.priorityTier {
+            return left.item.priorityTier < right.item.priorityTier
+          }
+          return left.idx < right.idx
+        }
+        .prefix(CommandPaletteSuggestions.maxItems - recent.count)
+        .map(\.item)
+    )
+
+    return CommandPaletteSuggestions(recent: recent, suggested: suggested)
+  }
+
   static func filterItems(
     items: [CommandPaletteItem],
     query: String,
@@ -157,8 +193,7 @@ struct CommandPaletteFeature {
   ) -> [CommandPaletteItem] {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
-      let visibleItems = items.filter(\.defaultSuggestion)
-      return prioritizeItems(items: visibleItems, recencyByID: recencyByID, now: now)
+      return suggestions(items: items, recencyByID: recencyByID, now: now).allItems
     }
     let scorer = CommandPaletteFuzzyScorer(query: trimmed, recencyByID: recencyByID, now: now)
     return scorer.rankedItems(from: items)
@@ -230,7 +265,8 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       subtitle: nil,
       kind: .checkForUpdates,
       category: .app,
-      defaultSuggestion: false
+      defaultSuggestion: true,
+      keywords: ["update", "version"]
     ),
     CommandPaletteItem(
       id: CommandPaletteItemID.globalOpenSettings,
@@ -238,7 +274,8 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       subtitle: nil,
       kind: .openSettings,
       category: .app,
-      defaultSuggestion: false
+      defaultSuggestion: true,
+      keywords: ["preferences", "config"]
     ),
     CommandPaletteItem(
       id: CommandPaletteItemID.globalOpenRepository,
@@ -246,7 +283,8 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       subtitle: nil,
       kind: .openRepository,
       category: .app,
-      defaultSuggestion: false
+      defaultSuggestion: true,
+      keywords: ["repo", "add repo"]
     ),
   ]
   if showsNewWorktreeAction {
@@ -257,7 +295,8 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
         subtitle: nil,
         kind: .newWorktree,
         category: .worktree,
-        defaultSuggestion: false
+        defaultSuggestion: true,
+        keywords: ["worktree", "branch"]
       )
     )
   }
@@ -268,7 +307,8 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       subtitle: nil,
       kind: .refreshWorktrees,
       category: .worktree,
-      defaultSuggestion: false
+      defaultSuggestion: true,
+      keywords: ["reload", "rescan"]
     )
   )
   items.append(
@@ -278,7 +318,8 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       subtitle: nil,
       kind: .jumpToLatestUnread,
       category: .navigation,
-      defaultSuggestion: false
+      defaultSuggestion: true,
+      keywords: ["unread", "bell", "notification"]
     )
   )
   items.append(
@@ -288,7 +329,8 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       subtitle: nil,
       kind: .viewArchivedWorktrees,
       category: .worktree,
-      defaultSuggestion: false
+      defaultSuggestion: true,
+      keywords: ["archive", "history"]
     )
   )
   items.append(
@@ -298,7 +340,8 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       subtitle: nil,
       kind: .installCLI,
       category: .app,
-      defaultSuggestion: false
+      defaultSuggestion: true,
+      keywords: ["cli", "command line", "terminal", "prowl"]
     )
   )
   return items
@@ -643,26 +686,6 @@ private enum CommandPaletteItemID {
   }
 }
 
-private func prioritizeItems(
-  items: [CommandPaletteItem],
-  recencyByID: [CommandPaletteItem.ID: TimeInterval],
-  now: Date
-) -> [CommandPaletteItem] {
-  let scored = items.enumerated().map { index, item in
-    (item: item, index: index, recency: commandPaletteRecencyScore(item, recencyByID: recencyByID, now: now))
-  }
-  let sorted = scored.sorted { left, right in
-    if left.item.priorityTier != right.item.priorityTier {
-      return left.item.priorityTier < right.item.priorityTier
-    }
-    if left.item.priorityTier < CommandPaletteItem.defaultPriorityTier, left.recency != right.recency {
-      return left.recency > right.recency
-    }
-    return left.index < right.index
-  }
-  return sorted.map(\.item)
-}
-
 private func commandPaletteRecencyScore(
   _ item: CommandPaletteItem,
   recencyByID: [CommandPaletteItem.ID: TimeInterval],
@@ -899,19 +922,27 @@ private struct CommandPaletteFuzzyScorer {
       return ItemScore(score: 0, labelMatch: nil, descriptionMatch: nil)
     }
 
-    let label = item.title
-    let description = item.subtitle
-
     if let values = query.values, !values.isEmpty {
-      return scoreItemMultiple(label: label, description: description, query: values)
+      return scoreItemMultiple(
+        label: item.title,
+        description: item.subtitle,
+        keywords: item.keywords,
+        query: values
+      )
     }
 
-    return scoreItemSingle(label: label, description: description, query: query.piece)
+    return scoreItemForPiece(
+      label: item.title,
+      description: item.subtitle,
+      keywords: item.keywords,
+      query: query.piece
+    )
   }
 
   private func scoreItemMultiple(
     label: String,
     description: String?,
+    keywords: [String],
     query: [PreparedQueryPiece]
   ) -> ItemScore {
     var totalScore = 0
@@ -919,7 +950,7 @@ private struct CommandPaletteFuzzyScorer {
     var totalDescriptionMatches: [Match] = []
 
     for piece in query {
-      let score = scoreItemSingle(label: label, description: description, query: piece)
+      let score = scoreItemForPiece(label: label, description: description, keywords: keywords, query: piece)
       if score.score == 0 {
         return ItemScore(score: 0, labelMatch: nil, descriptionMatch: nil)
       }
@@ -937,6 +968,30 @@ private struct CommandPaletteFuzzyScorer {
       labelMatch: normalizeMatches(totalLabelMatches),
       descriptionMatch: normalizeMatches(totalDescriptionMatches)
     )
+  }
+
+  /// Score one query piece against the item's title (with description fallback)
+  /// and each keyword. Keywords act as alternative labels — when one outscores
+  /// the title path, we keep title-derived highlight positions so the UI never
+  /// paints offsets that don't exist in the visible string.
+  private func scoreItemForPiece(
+    label: String,
+    description: String?,
+    keywords: [String],
+    query: PreparedQueryPiece
+  ) -> ItemScore {
+    var best = scoreItemSingle(label: label, description: description, query: query)
+    for keyword in keywords {
+      let keywordScore = scoreItemSingle(label: keyword, description: nil, query: query)
+      if keywordScore.score > best.score {
+        best = ItemScore(
+          score: keywordScore.score,
+          labelMatch: best.labelMatch,
+          descriptionMatch: best.descriptionMatch
+        )
+      }
+    }
+    return best
   }
 
   private func scoreItemSingle(

@@ -1,3 +1,13 @@
+struct CommandPaletteSuggestions: Equatable {
+  static let maxItems = 8
+
+  let recent: [CommandPaletteItem]
+  let suggested: [CommandPaletteItem]
+
+  var allItems: [CommandPaletteItem] { recent + suggested }
+  var isEmpty: Bool { recent.isEmpty && suggested.isEmpty }
+}
+
 struct CommandPaletteItem: Identifiable, Equatable {
   static let defaultPriorityTier = 100
 

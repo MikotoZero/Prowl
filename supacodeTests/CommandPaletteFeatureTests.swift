@@ -247,6 +247,222 @@ struct CommandPaletteFeatureTests {
     #expect(searchedItems.contains(where: { $0.id == changeIconItem?.id }))
   }
 
+  @Test func keywordOnlyMatchSurfacesItem() {
+    // "preferences" cannot fuzzy-match "Open Settings" (no p/r/f) so a match
+    // only succeeds if keywords participate.
+    let openSettings = makeItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings,
+      keywords: ["preferences"]
+    )
+
+    let result = CommandPaletteFeature.filterItems(items: [openSettings], query: "preferences")
+    expectNoDifference(result.map(\.id), [openSettings.id])
+  }
+
+  @Test func keywordMatchRanksBelowDirectTitleMatch() {
+    let openSettings = makeItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings,
+      keywords: ["preferences"]
+    )
+    let prefBranch = makeItem(
+      id: "worktree.preferences.select",
+      title: "preferences",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-pref")
+    )
+
+    let result = CommandPaletteFeature.filterItems(items: [openSettings, prefBranch], query: "preferences")
+    #expect(result.first?.id == prefBranch.id)
+  }
+
+  @Test func keywordMatchSurvivesMultiPieceQuery() {
+    // "preferences" has to match via the keyword; "settings" matches the title.
+    let openSettings = makeItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings,
+      keywords: ["preferences"]
+    )
+
+    let result = CommandPaletteFeature.filterItems(items: [openSettings], query: "preferences settings")
+    expectNoDifference(result.map(\.id), [openSettings.id])
+  }
+
+  @Test func keywordMatchDoesNotIntroduceLabelHighlightsOutsideTitle() {
+    let openSettings = makeItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings,
+      keywords: ["preferences"]
+    )
+
+    let result = CommandPaletteFeature.filterItems(items: [openSettings], query: "preferences")
+    #expect(result.count == 1)
+    // Sanity: the returned item is unchanged — no synthetic match positions leaked into the item.
+    #expect(result.first?.title == openSettings.title)
+  }
+
+  // MARK: - suggestions()
+
+  @Test func suggestionsEmptyInputReturnsEmptySections() {
+    let result = CommandPaletteFeature.suggestions(items: [], recencyByID: [:], now: .now)
+    #expect(result.recent.isEmpty)
+    #expect(result.suggested.isEmpty)
+  }
+
+  @Test func suggestionsOnlyDefaultSuggestionItemsAppearWhenNoRecency() {
+    let suggested = makeItem(
+      id: "s",
+      title: "Suggested",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    let hidden = makeItem(
+      id: "h",
+      title: "Hidden",
+      subtitle: nil,
+      kind: .ghosttyCommand("focus_split")
+    )
+    let suggestedWithFlag = CommandPaletteItem(
+      id: suggested.id,
+      title: suggested.title,
+      subtitle: suggested.subtitle,
+      kind: suggested.kind,
+      category: suggested.category,
+      defaultSuggestion: true
+    )
+
+    let result = CommandPaletteFeature.suggestions(
+      items: [suggestedWithFlag, hidden],
+      recencyByID: [:],
+      now: .now
+    )
+    #expect(result.recent.isEmpty)
+    expectNoDifference(result.suggested.map(\.id), [suggestedWithFlag.id])
+  }
+
+  @Test func suggestionsRecentIncludesNonSuggestionItemsWithRecency() {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let worktree = makeItem(
+      id: "worktree.fox.select",
+      title: "Repo / fox",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-fox")
+    )
+
+    let result = CommandPaletteFeature.suggestions(
+      items: [worktree],
+      recencyByID: [worktree.id: now.timeIntervalSince1970 - 86_400],
+      now: now
+    )
+    expectNoDifference(result.recent.map(\.id), [worktree.id])
+    #expect(result.suggested.isEmpty)
+  }
+
+  @Test func suggestionsRecentSortedByRecencyDesc() {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let recent = makeItem(id: "recent", title: "Recent", subtitle: nil, kind: .openSettings)
+    let older = makeItem(id: "older", title: "Older", subtitle: nil, kind: .openRepository)
+
+    let result = CommandPaletteFeature.suggestions(
+      items: [older, recent],
+      recencyByID: [
+        recent.id: now.timeIntervalSince1970 - 86_400,
+        older.id: now.timeIntervalSince1970 - 10 * 86_400,
+      ],
+      now: now
+    )
+    expectNoDifference(result.recent.map(\.id), [recent.id, older.id])
+  }
+
+  @Test func suggestionsDedupesRecentFromSuggested() {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let appLevel = CommandPaletteItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings,
+      category: .app,
+      defaultSuggestion: true
+    )
+
+    let result = CommandPaletteFeature.suggestions(
+      items: [appLevel],
+      recencyByID: [appLevel.id: now.timeIntervalSince1970 - 86_400],
+      now: now
+    )
+    expectNoDifference(result.recent.map(\.id), [appLevel.id])
+    #expect(result.suggested.isEmpty)
+  }
+
+  @Test func suggestionsCapsTotalAt8() {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let items = (0..<12).map { index in
+      makeItem(
+        id: "item-\(index)",
+        title: "Item \(index)",
+        subtitle: nil,
+        kind: .worktreeSelect("wt-\(index)")
+      )
+    }
+    let recency = Dictionary(
+      uniqueKeysWithValues: items.enumerated().map { idx, item in
+        (item.id, now.timeIntervalSince1970 - TimeInterval(idx + 1) * 3600)
+      }
+    )
+
+    let result = CommandPaletteFeature.suggestions(items: items, recencyByID: recency, now: now)
+    #expect(result.recent.count + result.suggested.count == CommandPaletteSuggestions.maxItems)
+  }
+
+  @Test func suggestionsSuggestedSortsByPriorityTierThenDeclarationOrder() {
+    let lowPriority = CommandPaletteItem(
+      id: "low",
+      title: "Low",
+      subtitle: nil,
+      kind: .openSettings,
+      category: .app,
+      defaultSuggestion: true,
+      priorityTier: 0
+    )
+    let defaultPriorityFirst = CommandPaletteItem(
+      id: "default-first",
+      title: "Default First",
+      subtitle: nil,
+      kind: .openSettings,
+      category: .app,
+      defaultSuggestion: true,
+      priorityTier: CommandPaletteItem.defaultPriorityTier
+    )
+    let defaultPrioritySecond = CommandPaletteItem(
+      id: "default-second",
+      title: "Default Second",
+      subtitle: nil,
+      kind: .openSettings,
+      category: .app,
+      defaultSuggestion: true,
+      priorityTier: CommandPaletteItem.defaultPriorityTier
+    )
+
+    let result = CommandPaletteFeature.suggestions(
+      items: [defaultPriorityFirst, defaultPrioritySecond, lowPriority],
+      recencyByID: [:],
+      now: .now
+    )
+    expectNoDifference(
+      result.suggested.map(\.id),
+      [lowPriority.id, defaultPriorityFirst.id, defaultPrioritySecond.id]
+    )
+  }
+
   @Test func filterItemsEmptyQueryHonorsDefaultSuggestionFlagOnly() {
     let suggested = CommandPaletteItem(
       id: "suggested",
@@ -519,13 +735,11 @@ struct CommandPaletteFeatureTests {
       kind: .removeWorktree("wt-fox", "repo-fox")
     )
 
-    expectNoDifference(
-      CommandPaletteFeature.filterItems(
-        items: [openSettings, newWorktree, selectFox, archiveFox, removeFox],
-        query: ""
-      ),
-      []
+    let result = CommandPaletteFeature.filterItems(
+      items: [openSettings, newWorktree, selectFox, archiveFox, removeFox],
+      query: ""
     )
+    expectNoDifference(result.map(\.id), [openSettings.id, newWorktree.id])
   }
 
   @Test func queryKeepsSelectionWhenEmpty() async {
@@ -1026,7 +1240,7 @@ struct CommandPaletteFeatureTests {
     #expect(result.first?.id == worktreeItem.id)
   }
 
-  @Test func emptyQueryStillHidesRootActionsAndWorktrees() {
+  @Test func emptyQueryShowsSuggestionItemsAndHidesContextualOnes() {
     let checkForUpdates = makeItem(
       id: "global.check-for-updates",
       title: "Check for Updates",
@@ -1052,7 +1266,7 @@ struct CommandPaletteFeatureTests {
       query: ""
     )
 
-    #expect(!result.contains { $0.id == checkForUpdates.id })
+    #expect(result.contains { $0.id == checkForUpdates.id })
     #expect(!result.contains { $0.id == worktreeFox.id })
     #expect(result.contains { $0.id == prAction.id })
   }
@@ -1197,6 +1411,7 @@ private func makeItem(
   title: String,
   subtitle: String?,
   kind: CommandPaletteItem.Kind,
+  keywords: [String] = [],
   priorityTier: Int = CommandPaletteItem.defaultPriorityTier
 ) -> CommandPaletteItem {
   CommandPaletteItem(
@@ -1206,6 +1421,7 @@ private func makeItem(
     kind: kind,
     category: testCategory(for: kind),
     defaultSuggestion: testDefaultSuggestion(for: kind),
+    keywords: keywords,
     priorityTier: priorityTier
   )
 }
@@ -1234,12 +1450,12 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
 
 private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
   switch kind {
-  case .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest,
-    .copyFailingJobURL, .copyCiFailureLogs, .rerunFailedJobs, .openFailingCheckDetails:
-    return true
   case .checkForUpdates, .openSettings, .openRepository, .installCLI,
     .newWorktree, .refreshWorktrees, .viewArchivedWorktrees, .jumpToLatestUnread,
-    .worktreeSelect, .removeWorktree, .archiveWorktree, .changeFocusedTabIcon,
+    .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest,
+    .copyFailingJobURL, .copyCiFailureLogs, .rerunFailedJobs, .openFailingCheckDetails:
+    return true
+  case .worktreeSelect, .removeWorktree, .archiveWorktree, .changeFocusedTabIcon,
     .ghosttyCommand, .openRepositoryOnCodeHost:
     return false
   #if DEBUG

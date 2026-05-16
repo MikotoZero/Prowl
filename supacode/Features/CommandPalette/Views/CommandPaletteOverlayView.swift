@@ -11,6 +11,7 @@ struct CommandPaletteOverlayView: View {
   @State private var queryFocusTask: Task<Void, Never>?
   @State private var hoveredID: CommandPaletteItem.ID?
   @State private var filteredItems: [CommandPaletteItem] = []
+  @State private var sectionedSuggestions: CommandPaletteSuggestions?
 
   var body: some View {
     ZStack {
@@ -36,6 +37,7 @@ struct CommandPaletteOverlayView: View {
                 query: $store.query,
                 selectedIndex: $store.selectedIndex,
                 items: filteredItems,
+                sections: sectionedSuggestions,
                 resolvedKeybindings: resolvedKeybindings,
                 hoveredID: $hoveredID,
                 isQueryFocused: isQueryFocused,
@@ -142,14 +144,25 @@ struct CommandPaletteOverlayView: View {
 
   private func refreshFilteredItems(items: [CommandPaletteItem]) -> [CommandPaletteItem] {
     let now = Date.now
-    let updatedItems = CommandPaletteFeature.filterItems(
-      items: items,
-      query: store.query,
-      recencyByID: store.recencyByItemID,
-      now: now
-    )
-    filteredItems = updatedItems
-    return updatedItems
+    let trimmed = store.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      let suggestions = CommandPaletteFeature.suggestions(
+        items: items,
+        recencyByID: store.recencyByItemID,
+        now: now
+      )
+      sectionedSuggestions = suggestions
+      filteredItems = suggestions.allItems
+    } else {
+      sectionedSuggestions = nil
+      filteredItems = CommandPaletteFeature.filterItems(
+        items: items,
+        query: trimmed,
+        recencyByID: store.recencyByItemID,
+        now: now
+      )
+    }
+    return filteredItems
   }
 
   private func focusQueryField() {
@@ -179,6 +192,7 @@ private struct CommandPaletteCard: View {
   @Binding var query: String
   @Binding var selectedIndex: Int?
   let items: [CommandPaletteItem]
+  let sections: CommandPaletteSuggestions?
   let resolvedKeybindings: ResolvedKeybindingMap
   @Binding var hoveredID: CommandPaletteItem.ID?
   let isQueryFocused: Bool
@@ -207,6 +221,7 @@ private struct CommandPaletteCard: View {
 
       CommandPaletteList(
         rows: items,
+        sections: sections,
         resolvedKeybindings: resolvedKeybindings,
         selectedIndex: $selectedIndex,
         hoveredID: $hoveredID
@@ -416,6 +431,7 @@ private struct CommandPaletteList: View {
   static let listHeight: CGFloat = 200
 
   let rows: [CommandPaletteItem]
+  let sections: CommandPaletteSuggestions?
   let resolvedKeybindings: ResolvedKeybindingMap
   @Binding var selectedIndex: Int?
   @Binding var hoveredID: CommandPaletteItem.ID?
@@ -428,17 +444,10 @@ private struct CommandPaletteList: View {
       ScrollViewReader { proxy in
         ScrollView {
           VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(rows.enumerated()), id: \.1.id) { index, row in
-              CommandPaletteRowView(
-                row: row,
-                resolvedKeybindings: resolvedKeybindings,
-                shortcutIndex: index < 5 ? index : nil,
-                isSelected: isRowSelected(index: index),
-                hoveredID: $hoveredID
-              ) {
-                activate(row.id)
-              }
-              .id(row.id)
+            if let sections {
+              renderSectioned(sections)
+            } else {
+              renderFlat()
             }
           }
           .padding(10)
@@ -452,12 +461,65 @@ private struct CommandPaletteList: View {
     }
   }
 
+  @ViewBuilder
+  private func renderFlat() -> some View {
+    ForEach(Array(rows.enumerated()), id: \.1.id) { index, row in
+      rowView(for: row, index: index)
+    }
+  }
+
+  @ViewBuilder
+  private func renderSectioned(_ sections: CommandPaletteSuggestions) -> some View {
+    if !sections.recent.isEmpty {
+      CommandPaletteSectionHeader(title: "Recent")
+      ForEach(sections.recent) { row in
+        if let index = rows.firstIndex(where: { $0.id == row.id }) {
+          rowView(for: row, index: index)
+        }
+      }
+    }
+    if !sections.suggested.isEmpty {
+      CommandPaletteSectionHeader(title: "Suggested")
+        .padding(.top, sections.recent.isEmpty ? 0 : 6)
+      ForEach(sections.suggested) { row in
+        if let index = rows.firstIndex(where: { $0.id == row.id }) {
+          rowView(for: row, index: index)
+        }
+      }
+    }
+  }
+
+  private func rowView(for row: CommandPaletteItem, index: Int) -> some View {
+    CommandPaletteRowView(
+      row: row,
+      resolvedKeybindings: resolvedKeybindings,
+      shortcutIndex: index < 5 ? index : nil,
+      isSelected: isRowSelected(index: index),
+      hoveredID: $hoveredID
+    ) {
+      activate(row.id)
+    }
+    .id(row.id)
+  }
+
   private func isRowSelected(index: Int) -> Bool {
     guard let selectedIndex else { return false }
     if selectedIndex < rows.count {
       return selectedIndex == index
     }
     return index == rows.count - 1
+  }
+}
+
+private struct CommandPaletteSectionHeader: View {
+  let title: String
+
+  var body: some View {
+    Text(title.uppercased())
+      .font(.caption2.weight(.semibold))
+      .foregroundStyle(.secondary)
+      .padding(.horizontal, 6)
+      .padding(.bottom, 2)
   }
 }
 
