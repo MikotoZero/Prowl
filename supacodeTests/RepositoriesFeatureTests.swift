@@ -3212,13 +3212,7 @@ struct RepositoriesFeatureTests {
           repositoryID: repository.id,
           pullRequestsByWorktreeID: [mainWorktree.id: mergedPullRequest]
         ))
-    ) {
-      $0.worktreeInfoByID[mainWorktree.id] = WorktreeInfoEntry(
-        addedLines: nil,
-        removedLines: nil,
-        pullRequest: mergedPullRequest
-      )
-    }
+    )
     await store.finish()
   }
 
@@ -3276,13 +3270,7 @@ struct RepositoriesFeatureTests {
           repositoryID: repository.id,
           pullRequestsByWorktreeID: [mainWorktree.id: mergedPullRequest]
         ))
-    ) {
-      $0.worktreeInfoByID[mainWorktree.id] = WorktreeInfoEntry(
-        addedLines: nil,
-        removedLines: nil,
-        pullRequest: mergedPullRequest
-      )
-    }
+    )
     await store.finish()
   }
 
@@ -4039,6 +4027,32 @@ struct RepositoriesFeatureTests {
         ))
     ) {
       $0.worktreeInfoByID.removeValue(forKey: featureWorktree.id)
+    }
+  }
+
+  @Test func repositoryPullRequestsLoadedClearsMergedPullRequestForMainWorktree() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let mergedPullRequest = makePullRequest(state: "MERGED", headRefName: mainWorktree.name)
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[mainWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: mergedPullRequest
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .githubIntegration(
+        .repositoryPullRequestsLoaded(
+          repositoryID: repository.id,
+          pullRequestsByWorktreeID: [mainWorktree.id: mergedPullRequest]
+        ))
+    ) {
+      $0.worktreeInfoByID.removeValue(forKey: mainWorktree.id)
     }
   }
 

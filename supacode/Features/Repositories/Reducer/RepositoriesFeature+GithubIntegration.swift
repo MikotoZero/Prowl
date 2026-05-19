@@ -197,7 +197,8 @@ extension RepositoriesFeature {
         guard let worktree = repository.worktrees[id: worktreeID] else {
           continue
         }
-        let pullRequest = pullRequestsByWorktreeID[worktreeID] ?? nil
+        let loadedPullRequest = pullRequestsByWorktreeID[worktreeID] ?? nil
+        let pullRequest = Self.displayPullRequest(loadedPullRequest, for: worktree)
         let previousPullRequest = state.worktreeInfoByID[worktreeID]?.pullRequest
         guard previousPullRequest != pullRequest else {
           continue
@@ -624,6 +625,16 @@ extension RepositoriesFeature {
       state.mergedWorktreeAction = action
       return .none
     }
+  }
+
+  nonisolated private static func displayPullRequest(
+    _ pullRequest: GithubPullRequest?,
+    for worktree: Worktree
+  ) -> GithubPullRequest? {
+    if worktree.isMain, pullRequest?.state.uppercased() == "MERGED" {
+      return nil
+    }
+    return pullRequest
   }
 
   nonisolated private static func validWebURL(_ raw: String) -> URL? {
