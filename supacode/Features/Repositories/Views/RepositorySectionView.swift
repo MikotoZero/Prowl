@@ -173,8 +173,11 @@ struct RepositorySectionView: View {
         }
       }
       if let color = appearance.color {
+        // Solid fill (not .glassEffect): glass/vibrant materials desaturate to
+        // gray when the window is not key, but the repo color dot must keep its
+        // color regardless of focus.
         Circle()
-          .glassEffect(.regular.tint(color.color))
+          .fill(color.color)
           .frame(width: 8, height: 8)
           .help(color.displayName)
           .accessibilityLabel(Text("Repo color: \(color.displayName)"))
