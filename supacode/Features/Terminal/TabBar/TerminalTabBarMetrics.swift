@@ -1,13 +1,13 @@
 import CoreGraphics
 
 enum TerminalTabBarMetrics {
-  static let barHeight: CGFloat = 34
+  static let barHeight: CGFloat = 33
   static let barPadding: CGFloat = 0
   static let tabHeight: CGFloat = 32
   static let tabMinWidth: CGFloat = 140
   static let tabMaxWidth: CGFloat = 220
-  static let tabCornerRadius: CGFloat = 4
-  static let tabSpacing: CGFloat = 2
+  static let tabCornerRadius: CGFloat = 0
+  static let tabSpacing: CGFloat = 0
   static let tabHorizontalPadding: CGFloat = 12
   static let contentSpacing: CGFloat = 6
   static let contentTrailingSpacing: CGFloat = 4

@@ -37,8 +37,8 @@ struct TerminalTabBarView: View {
       )
     }
     .frame(height: TerminalTabBarMetrics.barHeight)
+    .background(TerminalTabBarBackground())
     .saturation(activeState == .inactive ? 0 : 1)
-    .padding(.horizontal, 4)
     .clipped()
   }
 }
