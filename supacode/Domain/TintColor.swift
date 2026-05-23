@@ -9,7 +9,7 @@ import SwiftUI
 /// meaning). The project's "system colors only" rule is deliberately
 /// relaxed here: the custom tint is an explicit, user-driven free color
 /// choice, unlike the closed `RepositoryColorChoice` palette.
-nonisolated struct TintColor: Codable, Equatable, Sendable {
+nonisolated struct TintColor: Codable, Equatable, Hashable, Sendable {
   var red: Double
   var green: Double
   var blue: Double
