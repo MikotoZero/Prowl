@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import Sharing
 import SwiftUI
 
 private let shelfLogger = SupaLogger("Shelf")
@@ -22,6 +23,15 @@ struct ShelfView: View {
   /// stamping an opaque layer behind every child — including the
   /// terminal surface and empty-state area.
   @Environment(\.surfaceBackgroundOpacity) private var surfaceBackgroundOpacity
+  @Shared(.repositoryAppearances) private var repositoryAppearances
+  /// Height of the window toolbar/titlebar. The window draws content under
+  /// the transparent titlebar, so the Shelf's top safe-area inset equals
+  /// the toolbar height — exactly the region the tint band should fill.
+  @State private var toolbarInset: CGFloat = 0
+  /// Width of the floating glass sidebar. The detail is laid out full-bleed
+  /// beneath the sidebar, so the Shelf's leading safe-area inset equals the
+  /// sidebar width — the span the left tint band fills to color the nav.
+  @State private var sidebarInset: CGFloat = 0
 
   var body: some View {
     // Body-invocation counter. The @ViewBuilder getter rules out a
@@ -37,6 +47,9 @@ struct ShelfView: View {
     let openIndex = openBook.flatMap { book in
       books.firstIndex(where: { $0.id == book.id })
     }
+    // Color identity of the open book's repo (nil ⇒ neutral surface). Shared
+    // by the spine fill and the toolbar band so they read as one "L".
+    let openColor = openBook.flatMap { repositoryAppearances[$0.repositoryID]?.color }
 
     HStack(spacing: 0) {
       ForEach(Array(books.enumerated()), id: \.element.id) { index, book in
@@ -51,11 +64,70 @@ struct ShelfView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBackgroundOpacity))
+    // Capture the toolbar/titlebar height so the band can fill exactly that
+    // region: content draws under the transparent titlebar, so the top
+    // safe-area inset measured here equals the toolbar height.
+    .onGeometryChange(for: CGFloat.self) {
+      $0.safeAreaInsets.top
+    } action: {
+      toolbarInset = $0
+    }
+    // Capture the floating sidebar's width (= leading safe-area inset) so the
+    // left band can fill exactly the region behind it.
+    .onGeometryChange(for: CGFloat.self) {
+      $0.safeAreaInsets.leading
+    } action: {
+      sidebarInset = $0
+    }
+    // Repo-colored band sitting behind the toolbar items, bleeding up into
+    // the titlebar via `ignoresSafeArea`. Only shown when a book is open; an
+    // empty shelf keeps its bare chrome.
+    .overlay(alignment: .top) {
+      if openBook != nil {
+        topTintBand(openColor: openColor)
+      }
+    }
+    // Repo-colored strip behind the floating glass sidebar. The glass blends
+    // with the detail content beneath it, so this strip (not the sidebar's
+    // own background, which the glass hides) is what tints the nav panel —
+    // a single uniform color matching the open spine and the toolbar band.
+    .overlay(alignment: .leading) {
+      if openBook != nil {
+        leftTintBand(openColor: openColor)
+      }
+    }
     // Animate on every openBookID change — covers both Shelf-originated
     // book switches (which also set their own TCA animation) and
     // left-nav-originated switches, so the spine flow is consistent
     // regardless of entry point.
     .animation(.easeInOut(duration: 0.2), value: openBookID)
+  }
+
+  /// Tinted strip behind the toolbar items. Uses the exact same hue/alpha
+  /// as the open book's spine surface (`ShelfSurfaceTint`) so the band and
+  /// the spine join seamlessly.
+  private func topTintBand(openColor: RepositoryColorChoice?) -> some View {
+    ShelfSurfaceTint.base(for: openColor)
+      .opacity(ShelfSurfaceTint.peakAlpha(for: openColor))
+      .frame(height: toolbarInset)
+      .frame(maxWidth: .infinity)
+      .ignoresSafeArea(.container, edges: .top)
+      .allowsHitTesting(false)
+  }
+
+  /// Full-height strip filling the leading safe-area inset — i.e. the area
+  /// behind the floating glass sidebar. Uses the same hue/alpha as the spine
+  /// and the toolbar band, so once the glass blends it in, the nav panel,
+  /// the open spine, and the toolbar all read as one continuous color.
+  /// `.top` / `.bottom` are ignored too so it backs the sidebar's full
+  /// height, including its own toolbar region.
+  private func leftTintBand(openColor: RepositoryColorChoice?) -> some View {
+    ShelfSurfaceTint.base(for: openColor)
+      .opacity(ShelfSurfaceTint.peakAlpha(for: openColor))
+      .frame(width: sidebarInset)
+      .frame(maxHeight: .infinity)
+      .ignoresSafeArea(.container, edges: [.leading, .top, .bottom])
+      .allowsHitTesting(false)
   }
 
   @ViewBuilder
