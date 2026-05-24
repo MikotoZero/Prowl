@@ -258,9 +258,10 @@ struct WorktreeDetailView: View {
           store.send(.repositories(.toggleCanvas))
         }
       )
-      // Canvas tints the nav (leading) and the toolbar (top); the card
-      // title bars additionally carry their own per-repo color.
-      .windowChromeTint(chromeFill(repositories: repositories, context: .canvas), edges: [.top, .leading])
+      // Canvas tints the nav (leading) only; the toolbar is left untinted so
+      // floating cards don't read against a colored band. The card title
+      // bars still carry their own per-repo color.
+      .windowChromeTint(chromeFill(repositories: repositories, context: .canvas), edges: [.leading])
     } else if repositories.isShowingShelf {
       // Shelf manages its own chrome bands (and its always-repo-colored
       // spine) inside `ShelfView`, so no tint modifier is applied here.
