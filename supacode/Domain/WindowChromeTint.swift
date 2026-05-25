@@ -90,14 +90,13 @@ enum WindowChromeTint {
     }
   }
 
-  /// Resolves a chrome surface background to an opaque sRGB color under
-  /// the requested app appearance. `toolbarBackground` sits on the real
-  /// AppKit toolbar surface, so a translucent semantic color can otherwise
-  /// be resolved against the system appearance captured when the app
-  /// launched. Shelf spines use this same precomposed color so the open
-  /// spine and toolbar read as one continuous surface in light and dark
-  /// appearances.
-  static func surfaceBackgroundComponents(
+  /// Resolves the fallback fullscreen toolbar background to an opaque sRGB
+  /// color under the requested app appearance. The normal window path keeps
+  /// the toolbar background hidden so the original content tint / system
+  /// material composition remains untouched; this fallback is only for the
+  /// fullscreen AppKit toolbar surface, which can stop sampling the content
+  /// behind it.
+  static func fullscreenToolbarBackgroundComponents(
     fill: Fill?,
     colorScheme: ColorScheme
   ) -> RGBComponents {
@@ -144,6 +143,10 @@ enum WindowChromeTint {
 
   private static func fallbackColor(for colorScheme: ColorScheme) -> NSColor {
     colorScheme == .dark ? .black : .white
+  }
+
+  static func usesExplicitToolbarBackground(isFullScreen: Bool) -> Bool {
+    isFullScreen
   }
 }
 
@@ -227,16 +230,126 @@ private struct WindowChromeTintModifier: ViewModifier {
 private struct WindowToolbarChromeBackgroundModifier: ViewModifier {
   let fill: WindowChromeTint.Fill?
   @Environment(\.colorScheme) private var colorScheme
+  @State private var isFullScreen = false
 
   @ViewBuilder
   func body(content: Content) -> some View {
-    let background = WindowChromeTint.surfaceBackgroundComponents(
-      fill: fill,
-      colorScheme: colorScheme
-    ).color
+    if WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: isFullScreen) {
+      let background = WindowChromeTint.fullscreenToolbarBackgroundComponents(
+        fill: fill,
+        colorScheme: colorScheme
+      ).color
 
-    content
-      .toolbarBackground(background, for: .windowToolbar)
-      .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+      content
+        .toolbarBackground(background, for: .windowToolbar)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+        .background { WindowFullScreenReader(isFullScreen: $isFullScreen) }
+    } else {
+      content
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .background { WindowFullScreenReader(isFullScreen: $isFullScreen) }
+    }
   }
+}
+
+private struct WindowFullScreenReader: NSViewRepresentable {
+  @Binding var isFullScreen: Bool
+
+  func makeNSView(context: Context) -> WindowFullScreenReaderView {
+    let view = WindowFullScreenReaderView()
+    view.onFullScreenChange = makeChangeHandler()
+    return view
+  }
+
+  func updateNSView(_ nsView: WindowFullScreenReaderView, context: Context) {
+    nsView.onFullScreenChange = makeChangeHandler()
+    nsView.refresh()
+  }
+
+  private func makeChangeHandler() -> (Bool) -> Void {
+    let binding = $isFullScreen
+    return { isFullScreen in
+      guard binding.wrappedValue != isFullScreen else { return }
+      DispatchQueue.main.async {
+        guard binding.wrappedValue != isFullScreen else { return }
+        binding.wrappedValue = isFullScreen
+      }
+    }
+  }
+}
+
+@MainActor
+private final class WindowFullScreenReaderView: NSView {
+  var onFullScreenChange: ((Bool) -> Void)?
+
+  private weak var observedWindow: NSWindow?
+  private var observers: [NSObjectProtocol] = []
+
+  deinit {
+    MainActor.assumeIsolated {
+      removeObservers()
+    }
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    updateObservedWindow()
+  }
+
+  func refresh() {
+    updateObservedWindow()
+    publishFullScreenState()
+  }
+
+  private func updateObservedWindow() {
+    guard observedWindow !== window else { return }
+
+    removeObservers()
+    observedWindow = window
+
+    guard let window else {
+      onFullScreenChange?(false)
+      return
+    }
+
+    let notificationCenter = NotificationCenter.default
+    for name in Self.observedWindowNotifications {
+      let observer = notificationCenter.addObserver(
+        forName: name,
+        object: window,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated {
+          self?.schedulePublishFullScreenState()
+        }
+      }
+      observers.append(observer)
+    }
+
+    publishFullScreenState()
+  }
+
+  private func removeObservers() {
+    let notificationCenter = NotificationCenter.default
+    for observer in observers {
+      notificationCenter.removeObserver(observer)
+    }
+    observers.removeAll()
+  }
+
+  private func schedulePublishFullScreenState() {
+    publishFullScreenState()
+    DispatchQueue.main.async { [weak self] in
+      self?.publishFullScreenState()
+    }
+  }
+
+  private func publishFullScreenState() {
+    onFullScreenChange?(window?.styleMask.contains(.fullScreen) == true)
+  }
+
+  private static let observedWindowNotifications: [NSNotification.Name] = [
+    NSWindow.didEnterFullScreenNotification,
+    NSWindow.didExitFullScreenNotification,
+  ]
 }

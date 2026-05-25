@@ -47,42 +47,38 @@ struct WindowChromeTintTests {
   // MARK: - Toolbar background resolution
 
   @Test
-  func surfaceBackgroundUsesRequestedColorSchemeForNeutralChrome() {
-    let light = WindowChromeTint.surfaceBackgroundComponents(fill: nil, colorScheme: .light)
-    let dark = WindowChromeTint.surfaceBackgroundComponents(fill: nil, colorScheme: .dark)
+  func fullscreenToolbarBackgroundUsesRequestedColorSchemeForNeutralChrome() {
+    let light = WindowChromeTint.fullscreenToolbarBackgroundComponents(fill: nil, colorScheme: .light)
+    let dark = WindowChromeTint.fullscreenToolbarBackgroundComponents(fill: nil, colorScheme: .dark)
 
     #expect(light.luminance > dark.luminance)
   }
 
   @Test
-  func surfaceBackgroundUsesRequestedColorSchemeForPrimaryTintFallback() {
+  func fullscreenToolbarBackgroundUsesRequestedColorSchemeForPrimaryTintFallback() {
     let fill = WindowChromeTint.Fill(color: .primary, alpha: WindowChromeTint.neutralPeakAlpha)
-    let light = WindowChromeTint.surfaceBackgroundComponents(fill: fill, colorScheme: .light)
-    let dark = WindowChromeTint.surfaceBackgroundComponents(fill: fill, colorScheme: .dark)
+    let light = WindowChromeTint.fullscreenToolbarBackgroundComponents(fill: fill, colorScheme: .light)
+    let dark = WindowChromeTint.fullscreenToolbarBackgroundComponents(fill: fill, colorScheme: .dark)
 
     #expect(light.luminance > dark.luminance)
   }
 
   @Test
-  func surfaceBackgroundIgnoresCurrentSystemAppearance() {
+  func fullscreenToolbarBackgroundIgnoresCurrentSystemAppearance() {
     let lightWhileCurrentIsDark = withDrawingAppearance(.darkAqua) {
-      WindowChromeTint.surfaceBackgroundComponents(fill: nil, colorScheme: .light)
+      WindowChromeTint.fullscreenToolbarBackgroundComponents(fill: nil, colorScheme: .light)
     }
     let lightWhileCurrentIsLight = withDrawingAppearance(.aqua) {
-      WindowChromeTint.surfaceBackgroundComponents(fill: nil, colorScheme: .light)
+      WindowChromeTint.fullscreenToolbarBackgroundComponents(fill: nil, colorScheme: .light)
     }
 
     #expect(lightWhileCurrentIsDark == lightWhileCurrentIsLight)
   }
 
   @Test
-  func sameFillProducesSameSurfaceBackgroundForToolbarAndShelfSpine() {
-    let fill = WindowChromeTint.Fill(color: .red, alpha: WindowChromeTint.saturatedPeakAlpha)
-
-    let toolbarBackground = WindowChromeTint.surfaceBackgroundComponents(fill: fill, colorScheme: .light)
-    let shelfSpineBackground = WindowChromeTint.surfaceBackgroundComponents(fill: fill, colorScheme: .light)
-
-    #expect(toolbarBackground == shelfSpineBackground)
+  func explicitToolbarBackgroundIsOnlyForFullscreen() {
+    #expect(!WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: false))
+    #expect(WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: true))
   }
 
   // MARK: - TintColor persistence
