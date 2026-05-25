@@ -216,6 +216,16 @@ final class GhosttySurfaceView: NSView, Identifiable {
     return String(content[swiftRange])
   }
 
+  static func stringFromGhosttyText(pointer: UnsafePointer<CChar>?, length: UInt) -> String {
+    guard let pointer, length > 0, length <= UInt(Int.max) else { return "" }
+    let buffer = UnsafeRawBufferPointer(start: pointer, count: Int(length))
+    return String(bytes: buffer, encoding: .utf8) ?? ""
+  }
+
+  private static func string(from text: ghostty_text_s) -> String {
+    stringFromGhosttyText(pointer: text.text, length: text.text_len)
+  }
+
   override var acceptsFirstResponder: Bool { true }
 
   init(
@@ -577,7 +587,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     var text = ghostty_text_s()
     guard ghostty_surface_read_selection(surface, &text) else { return nil }
     defer { ghostty_surface_free_text(surface, &text) }
-    let value = String(cString: text.text)
+    let value = Self.string(from: text)
     return value.isEmpty ? nil : value
   }
 
@@ -662,7 +672,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     )
     guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
     defer { ghostty_surface_free_text(surface, &text) }
-    return String(cString: text.text)
+    return Self.string(from: text)
   }
 
   private func readScreenContents() -> String {
@@ -908,7 +918,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
       font.release()
     }
 
-    let str = NSAttributedString(string: String(cString: text.text), attributes: attributes)
+    let str = NSAttributedString(string: Self.string(from: text), attributes: attributes)
     let point = NSPoint(x: text.tl_px_x, y: frame.size.height - text.tl_px_y)
     showDefinition(for: str, at: point)
   }
@@ -1875,7 +1885,7 @@ extension GhosttySurfaceView: NSTextInputClient {
       attributes[.font] = font.takeUnretainedValue()
       font.release()
     }
-    return NSAttributedString(string: String(cString: text.text), attributes: attributes)
+    return NSAttributedString(string: Self.string(from: text), attributes: attributes)
   }
 
   func characterIndex(for point: NSPoint) -> Int {
@@ -2373,7 +2383,7 @@ extension GhosttySurfaceView: NSServicesMenuRequestor {
     guard ghostty_surface_read_selection(surface, &text) else { return false }
     defer { ghostty_surface_free_text(surface, &text) }
     pboard.declareTypes([.string], owner: nil)
-    pboard.setString(String(cString: text.text), forType: .string)
+    pboard.setString(Self.string(from: text), forType: .string)
     return true
   }
 
