@@ -1098,6 +1098,60 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test func selectCanvasSeedsInitialTabForSelectedWorktree() async {
+    // Canvas only renders cards for worktrees with a live terminal surface.
+    // Entering Canvas must seed the selected worktree's tab so launching
+    // straight into Canvas shows that worktree's card — Normal/Shelf open one
+    // tab on launch, but Canvas mounts no per-worktree view to do it lazily.
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.selectCanvas) {
+      $0.preCanvasWorktreeID = worktree.id
+      $0.preCanvasTerminalTargetID = worktree.id
+      $0.selection = .canvas
+    }
+    await store.finish()
+
+    #expect(
+      sentCommands.value == [
+        .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false),
+        .setCanvasMode(true),
+      ]
+    )
+  }
+
+  @Test func selectCanvasWithoutSelectionOnlyEntersCanvasMode() async {
+    // With nothing selected there is no surface to seed — Canvas just flips
+    // into canvas mode and renders an empty board.
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.selectCanvas) {
+      $0.selection = .canvas
+    }
+    await store.finish()
+
+    #expect(sentCommands.value == [.setCanvasMode(true)])
+  }
+
   @Test func selectRepositoryIgnoresUnknownRepository() async {
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()

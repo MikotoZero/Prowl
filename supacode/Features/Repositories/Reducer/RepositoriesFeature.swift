@@ -495,11 +495,18 @@ struct RepositoriesFeature {
           // Restore clears the selection we just set, and any books not
           // in the saved layout would linger as stray spines.
           @Shared(.settingsFile) var settingsFile
-          if settingsFile.global.defaultViewMode == .shelf,
-            state.launchRestoreMode != .restoreLayout,
-            !state.isShelfActive
-          {
-            allEffects.append(.send(.toggleShelf))
+          if state.launchRestoreMode != .restoreLayout {
+            switch settingsFile.global.defaultViewMode {
+            case .shelf where !state.isShelfActive:
+              allEffects.append(.send(.toggleShelf))
+            case .canvas where !state.isShowingCanvas:
+              // `.toggleCanvas` shares Shelf's guards: it only enters
+              // when at least one worktree row exists, otherwise it
+              // falls back to Normal.
+              allEffects.append(.send(.toggleCanvas))
+            case .normal, .shelf, .canvas:
+              break
+            }
           }
           return .merge(allEffects)
 
@@ -743,12 +750,26 @@ struct RepositoriesFeature {
 
         case .selectCanvas:
           // Remember the current worktree so toggleCanvas can restore it.
+          let canvasSeedWorktree = state.selectedTerminalWorktree
           state.preCanvasWorktreeID = state.selectedWorktreeID
-          state.preCanvasTerminalTargetID = state.selectedTerminalWorktree?.id
+          state.preCanvasTerminalTargetID = canvasSeedWorktree?.id
           state.isShelfActive = false
           state.selection = .canvas
           state.sidebarSelectedWorktreeIDs = []
+          // Canvas only renders cards for worktrees that already have a live
+          // terminal surface. Normal/Shelf get the previously-focused worktree
+          // opened lazily when its view mounts and calls `ensureInitialTab`;
+          // Canvas mounts no such per-worktree view, so launching straight into
+          // Canvas would show an empty board. Seed the surface for the worktree
+          // we're entering from so at least that card appears — matching the
+          // single-tab restore Normal and Shelf perform. `ensureInitialTab` is
+          // idempotent, so this no-ops once the worktree already has tabs.
           return .run { _ in
+            if let canvasSeedWorktree {
+              await terminalClient.send(
+                .ensureInitialTab(canvasSeedWorktree, runSetupScriptIfNew: false, focusing: false)
+              )
+            }
             await terminalClient.send(.setCanvasMode(true))
           }
 
