@@ -93,6 +93,11 @@ struct AppearanceSettingsView: View {
           .help("View Prowl starts in on launch. Shelf and Canvas require at least one worktree or folder.")
         }
         Section("Default Editor") {
+          Toggle(
+            "Show in toolbar",
+            isOn: $store.showDefaultEditorInToolbar
+          )
+          .help("Show the Open in Editor button in the worktree toolbar.")
           Picker(
             "Default editor",
             selection: $store.defaultEditorID
@@ -105,6 +110,13 @@ struct AppearanceSettingsView: View {
             }
           }
           .help("Applies to worktrees without repository overrides.")
+        }
+        Section("Run") {
+          Toggle(
+            "Show in toolbar",
+            isOn: $store.showRunButtonInToolbar
+          )
+          .help("Show the Run button in the worktree toolbar.")
         }
         Section("Quit") {
           Toggle(

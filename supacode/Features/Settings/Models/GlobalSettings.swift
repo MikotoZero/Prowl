@@ -31,6 +31,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var autoShowActiveAgentsPanel: Bool
   var windowTintMode: WindowTintMode
   var windowTintCustomColor: TintColor
+  var showRunButtonInToolbar: Bool
+  var showDefaultEditorInToolbar: Bool
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -64,7 +66,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dimUnfocusedSplits: true,
     autoShowActiveAgentsPanel: false,
     windowTintMode: .repositoryColor,
-    windowTintCustomColor: .default
+    windowTintCustomColor: .default,
+    showRunButtonInToolbar: true,
+    showDefaultEditorInToolbar: true
   )
 
   init(
@@ -99,7 +103,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dimUnfocusedSplits: Bool = true,
     autoShowActiveAgentsPanel: Bool = false,
     windowTintMode: WindowTintMode = .repositoryColor,
-    windowTintCustomColor: TintColor = .default
+    windowTintCustomColor: TintColor = .default,
+    showRunButtonInToolbar: Bool = true,
+    showDefaultEditorInToolbar: Bool = true
   ) {
     self.appearanceMode = appearanceMode
     self.defaultEditorID = defaultEditorID
@@ -133,6 +139,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.autoShowActiveAgentsPanel = autoShowActiveAgentsPanel
     self.windowTintMode = windowTintMode
     self.windowTintCustomColor = windowTintCustomColor
+    self.showRunButtonInToolbar = showRunButtonInToolbar
+    self.showDefaultEditorInToolbar = showDefaultEditorInToolbar
   }
 
   func encode(to encoder: any Encoder) throws {
@@ -169,6 +177,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(autoShowActiveAgentsPanel, forKey: .autoShowActiveAgentsPanel)
     try container.encode(windowTintMode, forKey: .windowTintMode)
     try container.encode(windowTintCustomColor, forKey: .windowTintCustomColor)
+    try container.encode(showRunButtonInToolbar, forKey: .showRunButtonInToolbar)
+    try container.encode(showDefaultEditorInToolbar, forKey: .showDefaultEditorInToolbar)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -204,6 +214,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case autoShowActiveAgentsPanel
     case windowTintMode
     case windowTintCustomColor
+    case showRunButtonInToolbar
+    case showDefaultEditorInToolbar
     // Legacy key for migration
     case automaticallyArchiveMergedWorktrees
   }
@@ -308,5 +320,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     windowTintCustomColor =
       try container.decodeIfPresent(TintColor.self, forKey: .windowTintCustomColor)
       ?? Self.default.windowTintCustomColor
+    showRunButtonInToolbar =
+      try container.decodeIfPresent(Bool.self, forKey: .showRunButtonInToolbar)
+      ?? Self.default.showRunButtonInToolbar
+    showDefaultEditorInToolbar =
+      try container.decodeIfPresent(Bool.self, forKey: .showDefaultEditorInToolbar)
+      ?? Self.default.showDefaultEditorInToolbar
   }
 }

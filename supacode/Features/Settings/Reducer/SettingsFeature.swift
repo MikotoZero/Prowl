@@ -41,6 +41,8 @@ struct SettingsFeature {
     /// the `ColorPicker` can bind to it directly; converted back to the
     /// persistable `TintColor` at the `globalSettings` boundary.
     var windowTintCustomColor: Color
+    var showRunButtonInToolbar: Bool
+    var showDefaultEditorInToolbar: Bool
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
     var selection: SettingsSection? = .general
@@ -82,6 +84,8 @@ struct SettingsFeature {
       autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       windowTintMode = settings.windowTintMode
       windowTintCustomColor = settings.windowTintCustomColor.color
+      showRunButtonInToolbar = settings.showRunButtonInToolbar
+      showDefaultEditorInToolbar = settings.showDefaultEditorInToolbar
     }
 
     var globalSettings: GlobalSettings {
@@ -119,7 +123,9 @@ struct SettingsFeature {
         dimUnfocusedSplits: dimUnfocusedSplits,
         autoShowActiveAgentsPanel: autoShowActiveAgentsPanel,
         windowTintMode: windowTintMode,
-        windowTintCustomColor: TintColor(windowTintCustomColor)
+        windowTintCustomColor: TintColor(windowTintCustomColor),
+        showRunButtonInToolbar: showRunButtonInToolbar,
+        showDefaultEditorInToolbar: showDefaultEditorInToolbar
       )
     }
   }
@@ -224,6 +230,8 @@ struct SettingsFeature {
         state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
         state.windowTintMode = normalizedSettings.windowTintMode
         state.windowTintCustomColor = normalizedSettings.windowTintCustomColor.color
+        state.showRunButtonInToolbar = normalizedSettings.showRunButtonInToolbar
+        state.showDefaultEditorInToolbar = normalizedSettings.showDefaultEditorInToolbar
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
