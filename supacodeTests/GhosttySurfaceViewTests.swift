@@ -431,6 +431,17 @@ struct GhosttySurfaceViewTests {
     )
   }
 
+  @Test func stringFromGhosttyTextUsesExplicitLength() {
+    let bytes: [UInt8] = Array("alpha".utf8) + [0] + Array("omega".utf8)
+
+    let decoded = bytes.withUnsafeBufferPointer { buffer in
+      let pointer = UnsafeRawPointer(buffer.baseAddress!).assumingMemoryBound(to: CChar.self)
+      return GhosttySurfaceView.stringFromGhosttyText(pointer: pointer, length: UInt(bytes.count))
+    }
+
+    #expect(Array(decoded.utf8) == bytes)
+  }
+
   @Test func keyboardLayoutChangeKeyUpSuppressionSuppressesMatchingKeyUp() {
     let suppression = GhosttySurfaceView.KeyboardLayoutChangeKeyUpSuppression(
       keyCode: 49,
