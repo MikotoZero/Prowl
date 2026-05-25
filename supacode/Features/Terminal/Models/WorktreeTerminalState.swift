@@ -9,6 +9,39 @@ private let terminalStateLogger = SupaLogger("TerminalState")
 private let activeAgentDetectionInterval: Duration = .milliseconds(300)
 private let idleAgentDetectionInterval: Duration = .seconds(2)
 
+private enum TerminalCloseConfirmationMode {
+  case prompt(TerminalCloseConfirmationTarget)
+  case skip
+}
+
+private enum TerminalCloseConfirmationTarget {
+  case pane
+  case tab
+  case tabs(count: Int)
+
+  var messageText: String {
+    switch self {
+    case .pane:
+      return "Close Terminal Pane?"
+    case .tab:
+      return "Close Terminal Tab?"
+    case .tabs(let count):
+      return count == 1 ? "Close Terminal Tab?" : "Close Terminal Tabs?"
+    }
+  }
+
+  var confirmButtonTitle: String {
+    switch self {
+    case .pane:
+      return "Close Pane"
+    case .tab:
+      return "Close Tab"
+    case .tabs(let count):
+      return count == 1 ? "Close Tab" : "Close Tabs"
+    }
+  }
+}
+
 private struct AgentDetectionDiagnostic {
   let tabId: TerminalTabID
   let childPID: pid_t?
@@ -43,6 +76,7 @@ final class WorktreeTerminalState {
   private var lastAgentDetectionDiagnosticsBySurface: [UUID: String] = [:]
   private var agentDetectionEnabled = true
   var tabIsRunningById: [TerminalTabID: Bool] = [:]
+  private var surfaceRunningStartedAtById: [UUID: Date] = [:]
   private var runScriptTabId: TerminalTabID?
   private var pendingSetupScript: Bool
   private var defaultFontSize: Float32?
@@ -297,7 +331,7 @@ final class WorktreeTerminalState {
   func runScript(_ script: String) -> TerminalTabID? {
     guard let input = runScriptInput(script) else { return nil }
     if let existing = runScriptTabId {
-      closeTab(existing)
+      closeTab(existing, confirmation: .skip)
     }
     let tabId = createTab(
       TabCreation(
@@ -324,8 +358,7 @@ final class WorktreeTerminalState {
   @discardableResult
   func stopRunScript() -> Bool {
     guard let runScriptTabId else { return false }
-    closeTab(runScriptTabId)
-    return true
+    return closeTab(runScriptTabId, confirmation: .skip)
   }
 
   private struct TabCreation: Equatable {
@@ -468,8 +501,7 @@ final class WorktreeTerminalState {
   @discardableResult
   func closeFocusedTab() -> Bool {
     guard let tabId = tabManager.selectedTabId else { return false }
-    closeTab(tabId)
-    return true
+    return closeTab(tabId)
   }
 
   @discardableResult
@@ -508,7 +540,14 @@ final class WorktreeTerminalState {
     return true
   }
 
-  func closeTab(_ tabId: TerminalTabID) {
+  @discardableResult
+  func closeTab(_ tabId: TerminalTabID) -> Bool {
+    closeTab(tabId, confirmation: .prompt(.tab))
+  }
+
+  @discardableResult
+  private func closeTab(_ tabId: TerminalTabID, confirmation: TerminalCloseConfirmationMode) -> Bool {
+    guard confirmCloseIfNeeded(tabIds: [tabId], mode: confirmation) else { return false }
     let wasRunScriptTab = tabId == runScriptTabId
     removeTree(for: tabId)
     tabManager.closeTab(tabId)
@@ -522,28 +561,97 @@ final class WorktreeTerminalState {
       setRunScriptTabId(nil)
     }
     onTabClosed?()
+    return true
   }
 
   func closeOtherTabs(keeping tabId: TerminalTabID) {
     let ids = tabManager.tabs.map(\.id).filter { $0 != tabId }
+    guard confirmCloseIfNeeded(tabIds: ids, mode: .prompt(.tabs(count: ids.count))) else { return }
     for id in ids {
-      closeTab(id)
+      closeTab(id, confirmation: .skip)
     }
   }
 
   func closeTabsToRight(of tabId: TerminalTabID) {
     guard let index = tabManager.tabs.firstIndex(where: { $0.id == tabId }) else { return }
     let ids = tabManager.tabs.dropFirst(index + 1).map(\.id)
+    guard confirmCloseIfNeeded(tabIds: ids, mode: .prompt(.tabs(count: ids.count))) else { return }
     for id in ids {
-      closeTab(id)
+      closeTab(id, confirmation: .skip)
     }
   }
 
   func closeAllTabs() {
     let ids = tabManager.tabs.map(\.id)
+    guard confirmCloseIfNeeded(tabIds: ids, mode: .prompt(.tabs(count: ids.count))) else { return }
     for id in ids {
-      closeTab(id)
+      closeTab(id, confirmation: .skip)
     }
+  }
+
+  private func confirmCloseIfNeeded(
+    tabIds: [TerminalTabID],
+    mode: TerminalCloseConfirmationMode
+  ) -> Bool {
+    let surfaceIDs = tabIds.flatMap { tabId in
+      trees[tabId]?.leaves().map(\.id) ?? []
+    }
+    return confirmCloseIfNeeded(surfaceIDs: surfaceIDs, mode: mode)
+  }
+
+  private func confirmCloseIfNeeded(
+    surfaceIDs: [UUID],
+    mode: TerminalCloseConfirmationMode
+  ) -> Bool {
+    guard !surfaceIDs.isEmpty else { return true }
+    switch mode {
+    case .skip:
+      return true
+    case .prompt(let target):
+      let candidates = closeProtectionCandidates(surfaceIDs: surfaceIDs)
+      let decision = TerminalCloseConfirmationPolicy.decision(for: candidates)
+      guard decision.requiresConfirmation else { return true }
+      return presentCloseConfirmation(target: target, decision: decision)
+    }
+  }
+
+  private func closeProtectionCandidates(surfaceIDs: [UUID]) -> [TerminalCloseProtectionCandidate] {
+    let now = Date()
+    return surfaceIDs.map { surfaceID in
+      let agentState = surfaceAgentStates[surfaceID]
+      let runningDuration = surfaceRunningStartedAtById[surfaceID].map { now.timeIntervalSince($0) }
+      return TerminalCloseProtectionCandidate(
+        hasAgent: agentState?.detectedAgent != nil,
+        agentDisplayState: agentState?.displayState,
+        commandRunningDuration: runningDuration
+      )
+    }
+  }
+
+  private func presentCloseConfirmation(
+    target: TerminalCloseConfirmationTarget,
+    decision: TerminalCloseConfirmationDecision
+  ) -> Bool {
+    let alert = NSAlert()
+    alert.messageText = target.messageText
+    alert.informativeText = closeConfirmationMessage(for: decision)
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: target.confirmButtonTitle)
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
+  }
+
+  private func closeConfirmationMessage(for decision: TerminalCloseConfirmationDecision) -> String {
+    let paneText = decision.protectedPaneCount == 1 ? "pane" : "panes"
+    let reasonText: String
+    if decision.reasons == Set([.agentActive]) {
+      reasonText = "active agent work or an unseen agent result"
+    } else if decision.reasons == Set([.longRunningCommand]) {
+      reasonText = "a command that has been running for at least 10 seconds"
+    } else {
+      reasonText = "active agent work, unseen agent results, or long-running commands"
+    }
+    return "This will close \(decision.protectedPaneCount) \(paneText) with \(reasonText)."
   }
 
   func splitTree(
@@ -604,6 +712,7 @@ final class WorktreeTerminalState {
     } catch {
       newSurface.closeSurface()
       surfaces.removeValue(forKey: newSurface.id)
+      surfaceRunningStartedAtById.removeValue(forKey: newSurface.id)
       cleanupCommandDetectorState(forSurfaceId: newSurface.id)
       cleanupAgentDetectionState(forSurfaceId: newSurface.id)
       return nil
@@ -689,6 +798,7 @@ final class WorktreeTerminalState {
       } catch {
         newSurface.closeSurface()
         surfaces.removeValue(forKey: newSurface.id)
+        surfaceRunningStartedAtById.removeValue(forKey: newSurface.id)
         cleanupCommandDetectorState(forSurfaceId: newSurface.id)
         cleanupAgentDetectionState(forSurfaceId: newSurface.id)
 
@@ -1124,8 +1234,7 @@ final class WorktreeTerminalState {
     }
     view.bridge.onCloseTab = { [weak self] _ in
       guard let self else { return false }
-      self.closeTab(tabId)
-      return true
+      return self.closeTab(tabId)
     }
     view.bridge.onGotoTab = { [weak self] target in
       guard let self else { return false }
@@ -1493,6 +1602,7 @@ final class WorktreeTerminalState {
       continuation.finish()
     }
 
+    surfaceRunningStartedAtById.removeValue(forKey: surfaceId)
     noteCommandFinishedForCommandDetection(surfaceId: surfaceId)
 
     // Custom command success toast. One-shot: removed regardless of outcome.
@@ -1859,6 +1969,7 @@ final class WorktreeTerminalState {
     for surface in tree.leaves() {
       surface.closeSurface()
       surfaces.removeValue(forKey: surface.id)
+      surfaceRunningStartedAtById.removeValue(forKey: surface.id)
       autoCloseSurfaceIds.remove(surface.id)
       pendingCustomCommands.removeValue(forKey: surface.id)
       cleanupCommandDetectorState(forSurfaceId: surface.id)
@@ -1888,8 +1999,17 @@ final class WorktreeTerminalState {
 
   private func updateRunningState(for tabId: TerminalTabID) {
     guard let tree = trees[tabId] else { return }
-    let isRunningNow = tree.leaves().contains { surface in
-      isRunningProgressState(surface.bridge.state.progressState)
+    let now = Date()
+    var isRunningNow = false
+    for surface in tree.leaves() {
+      if isRunningProgressState(surface.bridge.state.progressState) {
+        isRunningNow = true
+        if surfaceRunningStartedAtById[surface.id] == nil {
+          surfaceRunningStartedAtById[surface.id] = now
+        }
+      } else {
+        surfaceRunningStartedAtById.removeValue(forKey: surface.id)
+      }
     }
     tabIsRunningById[tabId] = isRunningNow
     tabManager.updateDirty(tabId, isDirty: isRunningNow)
@@ -2003,11 +2123,15 @@ final class WorktreeTerminalState {
     }
   }
 
-  private func handleCloseRequest(for view: GhosttySurfaceView, processAlive _: Bool) {
+  private func handleCloseRequest(for view: GhosttySurfaceView, processAlive: Bool) {
     guard surfaces[view.id] != nil else { return }
+    if processAlive {
+      guard confirmCloseIfNeeded(surfaceIDs: [view.id], mode: .prompt(.pane)) else { return }
+    }
     guard let tabId = tabId(containing: view.id), let tree = trees[tabId] else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
+      surfaceRunningStartedAtById.removeValue(forKey: view.id)
       autoCloseSurfaceIds.remove(view.id)
       pendingCustomCommands.removeValue(forKey: view.id)
       cleanupCommandDetectorState(forSurfaceId: view.id)
@@ -2017,6 +2141,7 @@ final class WorktreeTerminalState {
     guard let node = tree.find(id: view.id) else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
+      surfaceRunningStartedAtById.removeValue(forKey: view.id)
       autoCloseSurfaceIds.remove(view.id)
       pendingCustomCommands.removeValue(forKey: view.id)
       cleanupCommandDetectorState(forSurfaceId: view.id)
@@ -2030,6 +2155,7 @@ final class WorktreeTerminalState {
     let newTree = tree.removing(node)
     view.closeSurface()
     surfaces.removeValue(forKey: view.id)
+    surfaceRunningStartedAtById.removeValue(forKey: view.id)
     autoCloseSurfaceIds.remove(view.id)
     pendingCustomCommands.removeValue(forKey: view.id)
     cleanupCommandDetectorState(forSurfaceId: view.id)
