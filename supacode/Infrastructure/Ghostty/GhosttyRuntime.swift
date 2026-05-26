@@ -609,7 +609,7 @@ final class GhosttyRuntime {
     Task { [weak self] in
       let snapshot = await Self.probeUserConfigSnapshot()
       let pair: GhosttyThemePair? =
-        snapshot?.themeMode == .single ? await Self.probeFallbackThemePair() : nil
+        snapshot?.themeMode.allowsMismatchFallback == true ? await Self.probeFallbackThemePair() : nil
       self?.applyResolvedThemeFallback(for: scheme, snapshot: snapshot, pair: pair)
     }
   }
@@ -621,7 +621,12 @@ final class GhosttyRuntime {
     pair: GhosttyThemePair?
   ) {
     guard currentColorScheme == scheme else { return }
-    guard let snapshot, snapshot.themeMode == .single else {
+    // `.none` (no user theme) is treated like a single dark theme here: Ghostty's
+    // no-theme default is the fixed dark `#282C34` reported by `+show-config`, so
+    // its `backgroundTone` resolves to `.dark` and adapts to a light app the same
+    // way an explicit single dark theme does. `.dual` is the user's explicit
+    // per-mode choice and is always respected.
+    guard let snapshot, snapshot.themeMode.allowsMismatchFallback else {
       setThemeFallbackOverride("")
       return
     }
@@ -724,7 +729,54 @@ final class GhosttyRuntime {
 
   nonisolated private static func userConfigSnapshotFromCLI() -> GhosttyUserConfigSnapshot? {
     guard let output = runGhosttyCommand(arguments: ["+show-config"]) else { return nil }
-    return GhosttyUserConfigSnapshot.parse(showConfigOutput: output)
+    let snapshot = GhosttyUserConfigSnapshot.parse(showConfigOutput: output)
+
+    // `ghostty +show-config` collapses an explicit same-name light/dark pair
+    // (`theme = light:X,dark:X`) back into a single `theme = X`. Trusting that
+    // alone would make us apply the single-theme fallback over the user's
+    // explicit light/dark choice, so re-derive the theme mode from the raw
+    // config text when we can read it. The background tone still comes from the
+    // resolved CLI output.
+    guard let rawMode = rawUserThemeMode() else { return snapshot }
+    return GhosttyUserConfigSnapshot(themeMode: rawMode, backgroundTone: snapshot.backgroundTone)
+  }
+
+  nonisolated private static func rawUserThemeMode() -> GhosttyThemeMode? {
+    guard let url = preferredGhosttyConfigURL(),
+      let contents = try? String(contentsOf: url, encoding: .utf8),
+      let spec = GhosttyUserConfigSnapshot.rawThemeSpec(fromConfig: contents)
+    else { return nil }
+    return GhosttyUserConfigSnapshot.parseThemeMode(from: spec)
+  }
+
+  /// Mirrors Ghostty's macOS default-config selection: prefer the Application
+  /// Support file when present, otherwise fall back to the XDG config. Within
+  /// each location the modern `config.ghostty` wins over the legacy `config`.
+  /// `theme` set through `config-file` includes isn't resolved here; those rare
+  /// setups simply keep the previous `+show-config` behavior.
+  nonisolated private static func preferredGhosttyConfigURL() -> URL? {
+    let fileManager = FileManager.default
+    let home = fileManager.homeDirectoryForCurrentUser
+
+    let appSupport = home.appending(
+      path: "Library/Application Support/com.mitchellh.ghostty",
+      directoryHint: .isDirectory
+    )
+    let xdgRoot: URL
+    if let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"], !xdg.isEmpty {
+      xdgRoot = URL(fileURLWithPath: xdg, isDirectory: true)
+    } else {
+      xdgRoot = home.appending(path: ".config", directoryHint: .isDirectory)
+    }
+    let xdg = xdgRoot.appending(path: "ghostty", directoryHint: .isDirectory)
+
+    let candidates = [
+      appSupport.appending(path: "config.ghostty"),
+      appSupport.appending(path: "config"),
+      xdg.appending(path: "config.ghostty"),
+      xdg.appending(path: "config"),
+    ]
+    return candidates.first { fileManager.fileExists(atPath: $0.path) }
   }
 
   nonisolated private static func runGhosttyCommand(arguments: [String]) -> String? {
@@ -1100,6 +1152,21 @@ nonisolated enum GhosttyThemeMode: Equatable, Sendable {
   case none
   case single
   case dual
+
+  /// Whether a tone mismatch with the app appearance should fall back to a
+  /// default light/dark pair. A `.dual` theme is the user's explicit per-mode
+  /// choice and is always respected; `.single` and `.none` are adapted so a
+  /// light app never shows a dark terminal — `.none` because Ghostty's
+  /// no-theme default is a fixed dark scheme that otherwise ignores the
+  /// app appearance.
+  var allowsMismatchFallback: Bool {
+    switch self {
+    case .single, .none:
+      return true
+    case .dual:
+      return false
+    }
+  }
 }
 
 nonisolated enum GhosttyTerminalTone: Equatable, Sendable {
@@ -1136,7 +1203,24 @@ nonisolated struct GhosttyUserConfigSnapshot: Equatable, Sendable {
     return .init(themeMode: themeMode, backgroundTone: backgroundTone)
   }
 
-  private static func parseThemeMode(from spec: String?) -> GhosttyThemeMode {
+  /// The raw `theme` value as written in a user's Ghostty config file, or `nil`
+  /// when none is set. Unlike `ghostty +show-config`, this preserves an explicit
+  /// same-name light/dark pair (`theme = light:X,dark:X`) instead of collapsing
+  /// it back to a single `theme = X`. Later lines win, matching Ghostty.
+  static func rawThemeSpec(fromConfig contents: String) -> String? {
+    var lastSpec: String?
+    for rawLine in contents.split(whereSeparator: \.isNewline) {
+      let line = String(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !line.hasPrefix("#"), let separator = line.firstIndex(of: "=") else { continue }
+      let key = line[..<separator].trimmingCharacters(in: .whitespacesAndNewlines)
+      guard key == "theme" else { continue }
+      let value = line[line.index(after: separator)...].trimmingCharacters(in: .whitespacesAndNewlines)
+      if !value.isEmpty { lastSpec = value }
+    }
+    return lastSpec
+  }
+
+  static func parseThemeMode(from spec: String?) -> GhosttyThemeMode {
     guard let spec, !spec.isEmpty else { return .none }
 
     var hasLight = false
