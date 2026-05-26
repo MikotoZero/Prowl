@@ -55,6 +55,10 @@ final class GhosttySurfaceBridge {
     surfaceView?.readViewportContentsForCLI()
   }
 
+  func readActiveText() -> String? {
+    surfaceView?.readActiveContentsForCLI()
+  }
+
   func childPID() -> pid_t? {
     guard let surface else { return nil }
     let pid = ghostty_surface_pid(surface)

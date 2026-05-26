@@ -5,6 +5,12 @@ import Testing
 
 @MainActor
 struct GhosttySurfaceBridgeTests {
+  @Test func activeTextReturnsNilWithoutSurfaceView() {
+    let bridge = GhosttySurfaceBridge()
+
+    #expect(bridge.readActiveText() == nil)
+  }
+
   @Test func desktopNotificationEmitsCallback() {
     let bridge = GhosttySurfaceBridge()
     var received: (String, String)?

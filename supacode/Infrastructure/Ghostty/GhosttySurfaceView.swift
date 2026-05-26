@@ -689,6 +689,13 @@ final class GhosttySurfaceView: NSView, Identifiable {
     )
   }
 
+  func readActiveContentsForCLI() -> String? {
+    readText(
+      topLeftTag: GHOSTTY_POINT_ACTIVE,
+      bottomRightTag: GHOSTTY_POINT_ACTIVE
+    )
+  }
+
   func readScreenContentsForCLI() -> String? {
     readText(
       topLeftTag: GHOSTTY_POINT_SCREEN,
