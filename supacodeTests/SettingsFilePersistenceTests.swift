@@ -55,6 +55,30 @@ struct SettingsFilePersistenceTests {
     #expect(reloaded.pinnedWorktreeIDs == ["/tmp/repo-a/wt-1"])
   }
 
+  @Test(.dependencies) func saveAndReloadShelfSpineTintPreferences() throws {
+    let storage = SettingsTestStorage()
+
+    withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      $settings.withLock {
+        $0.global.shelfSpineTintFallback = .systemTint
+        $0.global.shelfSpineTintFollowsRepositoryColor = false
+      }
+    }
+
+    let reloaded: SettingsFile = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      return settings
+    }
+
+    #expect(reloaded.global.shelfSpineTintFallback == .systemTint)
+    #expect(reloaded.global.shelfSpineTintFollowsRepositoryColor == false)
+  }
+
   @Test(.dependencies) func invalidJSONResetsToDefaults() throws {
     let storage = MutableTestStorage(initialData: Data("{".utf8))
 
@@ -113,6 +137,8 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.defaultWorktreeBaseDirectoryPath == nil)
     #expect(settings.global.restoreTerminalLayoutOnLaunch == false)
     #expect(settings.global.defaultEditorID == OpenWorktreeAction.automaticSettingsID)
+    #expect(settings.global.shelfSpineTintFallback == .neutral)
+    #expect(settings.global.shelfSpineTintFollowsRepositoryColor == true)
     #expect(settings.repositoryRoots.isEmpty)
     #expect(settings.pinnedWorktreeIDs.isEmpty)
   }
