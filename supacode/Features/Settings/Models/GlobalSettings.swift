@@ -31,6 +31,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var autoShowActiveAgentsPanel: Bool
   var windowTintMode: WindowTintMode
   var windowTintCustomColor: TintColor
+  var showRunButtonInToolbar: Bool
+  var showDefaultEditorInToolbar: Bool
+  var dockBounceMode: DockBounceMode
+  var showNotificationDotOnDock: Bool
   var shelfSpineTintFallback: ShelfSpineTintFallback
   var shelfSpineTintFollowsRepositoryColor: Bool
 
@@ -67,6 +71,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     autoShowActiveAgentsPanel: false,
     windowTintMode: .repositoryColor,
     windowTintCustomColor: .default,
+    showRunButtonInToolbar: true,
+    showDefaultEditorInToolbar: true,
+    dockBounceMode: .off,
+    showNotificationDotOnDock: false,
     shelfSpineTintFallback: .neutral,
     shelfSpineTintFollowsRepositoryColor: true
   )
@@ -104,6 +112,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     autoShowActiveAgentsPanel: Bool = false,
     windowTintMode: WindowTintMode = .repositoryColor,
     windowTintCustomColor: TintColor = .default,
+    showRunButtonInToolbar: Bool = true,
+    showDefaultEditorInToolbar: Bool = true,
+    dockBounceMode: DockBounceMode = .off,
+    showNotificationDotOnDock: Bool = false,
     shelfSpineTintFallback: ShelfSpineTintFallback = .neutral,
     shelfSpineTintFollowsRepositoryColor: Bool = true
   ) {
@@ -139,6 +151,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.autoShowActiveAgentsPanel = autoShowActiveAgentsPanel
     self.windowTintMode = windowTintMode
     self.windowTintCustomColor = windowTintCustomColor
+    self.showRunButtonInToolbar = showRunButtonInToolbar
+    self.showDefaultEditorInToolbar = showDefaultEditorInToolbar
+    self.dockBounceMode = dockBounceMode
+    self.showNotificationDotOnDock = showNotificationDotOnDock
     self.shelfSpineTintFallback = shelfSpineTintFallback
     self.shelfSpineTintFollowsRepositoryColor = shelfSpineTintFollowsRepositoryColor
   }
@@ -177,6 +193,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(autoShowActiveAgentsPanel, forKey: .autoShowActiveAgentsPanel)
     try container.encode(windowTintMode, forKey: .windowTintMode)
     try container.encode(windowTintCustomColor, forKey: .windowTintCustomColor)
+    try container.encode(showRunButtonInToolbar, forKey: .showRunButtonInToolbar)
+    try container.encode(showDefaultEditorInToolbar, forKey: .showDefaultEditorInToolbar)
+    try container.encode(dockBounceMode, forKey: .dockBounceMode)
+    try container.encode(showNotificationDotOnDock, forKey: .showNotificationDotOnDock)
     try container.encode(shelfSpineTintFallback, forKey: .shelfSpineTintFallback)
     try container.encode(shelfSpineTintFollowsRepositoryColor, forKey: .shelfSpineTintFollowsRepositoryColor)
   }
@@ -214,6 +234,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case autoShowActiveAgentsPanel
     case windowTintMode
     case windowTintCustomColor
+    case showRunButtonInToolbar
+    case showDefaultEditorInToolbar
+    case dockBounceMode
+    case showNotificationDotOnDock
     case shelfSpineTintFallback
     case shelfSpineTintFollowsRepositoryColor
     // Legacy key for migration
@@ -264,15 +288,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree =
       try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree)
       ?? Self.default.deleteBranchOnDeleteWorktree
-    if let decoded = try container.decodeIfPresent(MergedWorktreeAction.self, forKey: .mergedWorktreeAction) {
-      mergedWorktreeAction = decoded
-    } else if let legacyBool = try container.decodeIfPresent(
-      Bool.self, forKey: .automaticallyArchiveMergedWorktrees
-    ) {
-      mergedWorktreeAction = legacyBool ? .archive : nil
-    } else {
-      mergedWorktreeAction = Self.default.mergedWorktreeAction
-    }
+    mergedWorktreeAction = try Self.decodeMergedWorktreeAction(from: container)
     promptForWorktreeCreation =
       try container.decodeIfPresent(Bool.self, forKey: .promptForWorktreeCreation)
       ?? Self.default.promptForWorktreeCreation
@@ -314,19 +330,25 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     autoShowActiveAgentsPanel =
       try container.decodeIfPresent(Bool.self, forKey: .autoShowActiveAgentsPanel)
       ?? Self.default.autoShowActiveAgentsPanel
-    windowTintMode =
-      try container.decodeIfPresent(WindowTintMode.self, forKey: .windowTintMode)
-      ?? Self.default.windowTintMode
-    windowTintCustomColor = try Self.decodeWindowTintCustomColor(from: container)
-    (shelfSpineTintFallback, shelfSpineTintFollowsRepositoryColor) =
-      try Self.decodeShelfSpineTint(from: container)
+    (windowTintMode, windowTintCustomColor) = try Self.decodeWindowTint(from: container)
+    (shelfSpineTintFallback, shelfSpineTintFollowsRepositoryColor) = try Self.decodeShelfSpineTint(from: container)
+    let toolbarAndDock = try Self.decodeToolbarAndDockSettings(from: container)
+    showRunButtonInToolbar = toolbarAndDock.showRunButtonInToolbar
+    showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar
+    dockBounceMode = toolbarAndDock.dockBounceMode
+    showNotificationDotOnDock = toolbarAndDock.showNotificationDotOnDock
   }
 
-  private static func decodeWindowTintCustomColor(
+  private static func decodeWindowTint(
     from container: KeyedDecodingContainer<CodingKeys>
-  ) throws -> TintColor {
-    try container.decodeIfPresent(TintColor.self, forKey: .windowTintCustomColor)
+  ) throws -> (WindowTintMode, TintColor) {
+    let mode =
+      try container.decodeIfPresent(WindowTintMode.self, forKey: .windowTintMode)
+      ?? Self.default.windowTintMode
+    let customColor =
+      try container.decodeIfPresent(TintColor.self, forKey: .windowTintCustomColor)
       ?? Self.default.windowTintCustomColor
+    return (mode, customColor)
   }
 
   private static func decodeShelfSpineTint(
@@ -339,5 +361,41 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .shelfSpineTintFollowsRepositoryColor)
       ?? Self.default.shelfSpineTintFollowsRepositoryColor
     return (fallback, followsRepositoryColor)
+  }
+
+  private static func decodeMergedWorktreeAction(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> MergedWorktreeAction? {
+    if let decoded = try container.decodeIfPresent(MergedWorktreeAction.self, forKey: .mergedWorktreeAction) {
+      return decoded
+    }
+    if let legacyBool = try container.decodeIfPresent(Bool.self, forKey: .automaticallyArchiveMergedWorktrees) {
+      return legacyBool ? .archive : nil
+    }
+    return Self.default.mergedWorktreeAction
+  }
+
+  /// The toolbar-visibility and Dock-notification preferences, decoded as a
+  /// unit so `init(from:)` stays within the body-length limit.
+  private struct ToolbarAndDockSettings {
+    let showRunButtonInToolbar: Bool
+    let showDefaultEditorInToolbar: Bool
+    let dockBounceMode: DockBounceMode
+    let showNotificationDotOnDock: Bool
+  }
+
+  private static func decodeToolbarAndDockSettings(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> ToolbarAndDockSettings {
+    try ToolbarAndDockSettings(
+      showRunButtonInToolbar: container.decodeIfPresent(Bool.self, forKey: .showRunButtonInToolbar)
+        ?? Self.default.showRunButtonInToolbar,
+      showDefaultEditorInToolbar: container.decodeIfPresent(Bool.self, forKey: .showDefaultEditorInToolbar)
+        ?? Self.default.showDefaultEditorInToolbar,
+      dockBounceMode: container.decodeIfPresent(DockBounceMode.self, forKey: .dockBounceMode)
+        ?? Self.default.dockBounceMode,
+      showNotificationDotOnDock: container.decodeIfPresent(Bool.self, forKey: .showNotificationDotOnDock)
+        ?? Self.default.showNotificationDotOnDock
+    )
   }
 }

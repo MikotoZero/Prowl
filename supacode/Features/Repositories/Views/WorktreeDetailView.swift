@@ -16,6 +16,8 @@ struct WorktreeDetailView: View {
     let customCommands: [UserCustomCommand]
     let isUpdateAvailable: Bool
     let availableUpdateVersion: String?
+    let showRunButtonInToolbar: Bool
+    let showDefaultEditorInToolbar: Bool
   }
 
   @Bindable var store: StoreOf<AppFeature>
@@ -89,7 +91,9 @@ struct WorktreeDetailView: View {
             runScriptIsRunning: runScriptIsRunning,
             customCommands: customCommands,
             isUpdateAvailable: state.updates.isUpdateAvailable,
-            availableUpdateVersion: state.updates.availableVersion
+            availableUpdateVersion: state.updates.availableVersion,
+            showRunButtonInToolbar: settingsFile.global.showRunButtonInToolbar,
+            showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar
           )
         )
       {
@@ -206,7 +210,9 @@ struct WorktreeDetailView: View {
       runScriptIsRunning: input.runScriptIsRunning,
       customCommands: input.customCommands,
       isUpdateAvailable: input.isUpdateAvailable,
-      availableUpdateVersion: input.availableUpdateVersion
+      availableUpdateVersion: input.availableUpdateVersion,
+      showRunButtonInToolbar: input.showRunButtonInToolbar,
+      showDefaultEditorInToolbar: input.showDefaultEditorInToolbar
     )
   }
 
@@ -572,6 +578,8 @@ struct WorktreeDetailView: View {
     let customCommands: [UserCustomCommand]
     let isUpdateAvailable: Bool
     let availableUpdateVersion: String?
+    let showRunButtonInToolbar: Bool
+    let showDefaultEditorInToolbar: Bool
   }
 
   fileprivate struct WorktreeToolbarContent: ToolbarContent {
@@ -624,15 +632,15 @@ struct WorktreeDetailView: View {
         }
       }
 
-      ToolbarSpacer(.fixed)
-
-      ToolbarItemGroup {
-        openMenu(
-          openActionSelection: toolbarState.openActionSelection,
-          showExtras: toolbarState.showExtras
-        )
+      if toolbarState.showDefaultEditorInToolbar {
+        ToolbarSpacer(.fixed)
+        ToolbarItemGroup {
+          openMenu(
+            openActionSelection: toolbarState.openActionSelection,
+            showExtras: toolbarState.showExtras
+          )
+        }
       }
-      ToolbarSpacer(.fixed)
       commandToolbarItems
 
     }
@@ -691,7 +699,22 @@ struct WorktreeDetailView: View {
 
     @ToolbarContentBuilder
     private var commandToolbarItems: some ToolbarContent {
-      if toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled {
+      let showRunButton =
+        toolbarState.showRunButtonInToolbar
+        && (toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled)
+      let entries = customCommandEntries
+      let inlineEntries = Array(entries.prefix(3))
+      let overflowEntries = Array(entries.dropFirst(3))
+
+      // One fixed separator in front of the whole Run + Custom Command cluster
+      // keeps it distinct from the Open Editor / notification groups no matter
+      // which items are hidden. Run and the custom commands share one group (no
+      // spacer between them), matching the grouping before the toolbar toggles.
+      if showRunButton || !inlineEntries.isEmpty || !overflowEntries.isEmpty {
+        ToolbarSpacer(.fixed)
+      }
+
+      if showRunButton {
         ToolbarItem {
           RunScriptToolbarButton(
             isRunning: toolbarState.runScriptIsRunning,
@@ -713,10 +736,6 @@ struct WorktreeDetailView: View {
           )
         }
       }
-
-      let entries = customCommandEntries
-      let inlineEntries = Array(entries.prefix(3))
-      let overflowEntries = Array(entries.dropFirst(3))
 
       if !inlineEntries.isEmpty {
         ToolbarItemGroup {
@@ -1060,7 +1079,9 @@ private struct WorktreeToolbarPreview: View {
         )
       ],
       isUpdateAvailable: true,
-      availableUpdateVersion: "2026.5.1"
+      availableUpdateVersion: "2026.5.1",
+      showRunButtonInToolbar: true,
+      showDefaultEditorInToolbar: true
     )
     let observer = CommandKeyObserver()
     observer.isPressed = false
