@@ -37,6 +37,8 @@ struct SettingsFeature {
     var dimUnfocusedSplits: Bool
     var autoShowActiveAgentsPanel: Bool
     var windowTintMode: WindowTintMode
+    var shelfSpineTintFallback: ShelfSpineTintFallback
+    var shelfSpineTintFollowsRepositoryColor: Bool
     /// Mirrors `GlobalSettings.windowTintCustomColor` as a live `Color` so
     /// the `ColorPicker` can bind to it directly; converted back to the
     /// persistable `TintColor` at the `globalSettings` boundary.
@@ -89,6 +91,8 @@ struct SettingsFeature {
       dimUnfocusedSplits = settings.dimUnfocusedSplits
       autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       windowTintMode = settings.windowTintMode
+      shelfSpineTintFallback = settings.shelfSpineTintFallback
+      shelfSpineTintFollowsRepositoryColor = settings.shelfSpineTintFollowsRepositoryColor
       windowTintCustomColor = settings.windowTintCustomColor.color
       showRunButtonInToolbar = settings.showRunButtonInToolbar
       showDefaultEditorInToolbar = settings.showDefaultEditorInToolbar
@@ -135,7 +139,9 @@ struct SettingsFeature {
         showRunButtonInToolbar: showRunButtonInToolbar,
         showDefaultEditorInToolbar: showDefaultEditorInToolbar,
         dockBounceMode: dockBounceMode,
-        showNotificationDotOnDock: showNotificationDotOnDock
+        showNotificationDotOnDock: showNotificationDotOnDock,
+        shelfSpineTintFallback: shelfSpineTintFallback,
+        shelfSpineTintFollowsRepositoryColor: shelfSpineTintFollowsRepositoryColor
       )
     }
   }
@@ -241,6 +247,8 @@ struct SettingsFeature {
         state.dimUnfocusedSplits = normalizedSettings.dimUnfocusedSplits
         state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
         state.windowTintMode = normalizedSettings.windowTintMode
+        state.shelfSpineTintFallback = normalizedSettings.shelfSpineTintFallback
+        state.shelfSpineTintFollowsRepositoryColor = normalizedSettings.shelfSpineTintFollowsRepositoryColor
         state.windowTintCustomColor = normalizedSettings.windowTintCustomColor.color
         state.showRunButtonInToolbar = normalizedSettings.showRunButtonInToolbar
         state.showDefaultEditorInToolbar = normalizedSettings.showDefaultEditorInToolbar

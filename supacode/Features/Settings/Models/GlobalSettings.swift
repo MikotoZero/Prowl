@@ -35,6 +35,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var showDefaultEditorInToolbar: Bool
   var dockBounceMode: DockBounceMode
   var showNotificationDotOnDock: Bool
+  var shelfSpineTintFallback: ShelfSpineTintFallback
+  var shelfSpineTintFollowsRepositoryColor: Bool
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -72,7 +74,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showRunButtonInToolbar: true,
     showDefaultEditorInToolbar: true,
     dockBounceMode: .off,
-    showNotificationDotOnDock: false
+    showNotificationDotOnDock: false,
+    shelfSpineTintFallback: .neutral,
+    shelfSpineTintFollowsRepositoryColor: true
   )
 
   init(
@@ -111,7 +115,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showRunButtonInToolbar: Bool = true,
     showDefaultEditorInToolbar: Bool = true,
     dockBounceMode: DockBounceMode = .off,
-    showNotificationDotOnDock: Bool = false
+    showNotificationDotOnDock: Bool = false,
+    shelfSpineTintFallback: ShelfSpineTintFallback = .neutral,
+    shelfSpineTintFollowsRepositoryColor: Bool = true
   ) {
     self.appearanceMode = appearanceMode
     self.defaultEditorID = defaultEditorID
@@ -149,6 +155,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.showDefaultEditorInToolbar = showDefaultEditorInToolbar
     self.dockBounceMode = dockBounceMode
     self.showNotificationDotOnDock = showNotificationDotOnDock
+    self.shelfSpineTintFallback = shelfSpineTintFallback
+    self.shelfSpineTintFollowsRepositoryColor = shelfSpineTintFollowsRepositoryColor
   }
 
   func encode(to encoder: any Encoder) throws {
@@ -189,6 +197,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(showDefaultEditorInToolbar, forKey: .showDefaultEditorInToolbar)
     try container.encode(dockBounceMode, forKey: .dockBounceMode)
     try container.encode(showNotificationDotOnDock, forKey: .showNotificationDotOnDock)
+    try container.encode(shelfSpineTintFallback, forKey: .shelfSpineTintFallback)
+    try container.encode(shelfSpineTintFollowsRepositoryColor, forKey: .shelfSpineTintFollowsRepositoryColor)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -228,6 +238,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case showDefaultEditorInToolbar
     case dockBounceMode
     case showNotificationDotOnDock
+    case shelfSpineTintFallback
+    case shelfSpineTintFollowsRepositoryColor
     // Legacy key for migration
     case automaticallyArchiveMergedWorktrees
   }
@@ -319,6 +331,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .autoShowActiveAgentsPanel)
       ?? Self.default.autoShowActiveAgentsPanel
     (windowTintMode, windowTintCustomColor) = try Self.decodeWindowTint(from: container)
+    (shelfSpineTintFallback, shelfSpineTintFollowsRepositoryColor) = try Self.decodeShelfSpineTint(from: container)
     let toolbarAndDock = try Self.decodeToolbarAndDockSettings(from: container)
     showRunButtonInToolbar = toolbarAndDock.showRunButtonInToolbar
     showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar
@@ -336,6 +349,18 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(TintColor.self, forKey: .windowTintCustomColor)
       ?? Self.default.windowTintCustomColor
     return (mode, customColor)
+  }
+
+  private static func decodeShelfSpineTint(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> (ShelfSpineTintFallback, Bool) {
+    let fallback =
+      try container.decodeIfPresent(ShelfSpineTintFallback.self, forKey: .shelfSpineTintFallback)
+      ?? Self.default.shelfSpineTintFallback
+    let followsRepositoryColor =
+      try container.decodeIfPresent(Bool.self, forKey: .shelfSpineTintFollowsRepositoryColor)
+      ?? Self.default.shelfSpineTintFollowsRepositoryColor
+    return (fallback, followsRepositoryColor)
   }
 
   private static func decodeMergedWorktreeAction(
