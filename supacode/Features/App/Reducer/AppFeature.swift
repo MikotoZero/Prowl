@@ -119,6 +119,7 @@ struct AppFeature {
   @Dependency(AppLifecycleClient.self) private var appLifecycleClient
   @Dependency(NotificationSoundClient.self) private var notificationSoundClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
+  @Dependency(DockClient.self) private var dockClient
   @Dependency(TerminalClient.self) private var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) private var customShortcutRegistryClient
@@ -236,9 +237,7 @@ struct AppFeature {
             await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
           },
           .run { _ in
-            await MainActor.run {
-              NSApplication.shared.dockTile.badgeLabel = nil
-            }
+            await dockClient.setNotificationBadge(false)
           },
           .run { send in
             for await event in await terminalClient.events() {
@@ -573,9 +572,7 @@ struct AppFeature {
             }
           },
           .run { _ in
-            await MainActor.run {
-              NSApplication.shared.dockTile.badgeLabel = showDot ? "●" : nil
-            }
+            await dockClient.setNotificationBadge(showDot)
           }
         )
 
@@ -1173,6 +1170,9 @@ struct AppFeature {
 
         case .commandPalette(.delegate(.debugSimulateUpdateFound)):
           return .send(.updates(.debugSimulateUpdateFound))
+
+        case .commandPalette(.delegate(.debugLightDockNotificationDot)):
+          return .run { _ in await dockClient.setNotificationBadge(true) }
       #endif
 
       case .commandPalette:
@@ -1200,23 +1200,11 @@ struct AppFeature {
             }
           )
         }
-        switch state.settings.dockBounceMode {
-        case .off:
-          break
-        case .once:
+        let bounceMode = state.settings.dockBounceMode
+        if bounceMode != .off {
           effects.append(
             .run { _ in
-              await MainActor.run {
-                _ = NSApp.requestUserAttention(.informationalRequest)
-              }
-            }
-          )
-        case .continuous:
-          effects.append(
-            .run { _ in
-              await MainActor.run {
-                _ = NSApp.requestUserAttention(.criticalRequest)
-              }
+              await dockClient.bounce(bounceMode)
             }
           )
         }
@@ -1226,9 +1214,7 @@ struct AppFeature {
         state.notificationIndicatorCount = count
         let showDot = state.settings.showNotificationDotOnDock && count > 0
         return .run { _ in
-          await MainActor.run {
-            NSApplication.shared.dockTile.badgeLabel = showDot ? "●" : nil
-          }
+          await dockClient.setNotificationBadge(showDot)
         }
 
       case .terminalEvent(.runScriptStatusChanged(let worktreeID, let isRunning)):

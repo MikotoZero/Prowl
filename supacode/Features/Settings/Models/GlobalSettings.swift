@@ -232,7 +232,6 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case automaticallyArchiveMergedWorktrees
   }
 
-  // swiftlint:disable:next function_body_length
   init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     appearanceMode = try container.decode(AppearanceMode.self, forKey: .appearanceMode)
@@ -277,15 +276,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree =
       try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree)
       ?? Self.default.deleteBranchOnDeleteWorktree
-    if let decoded = try container.decodeIfPresent(MergedWorktreeAction.self, forKey: .mergedWorktreeAction) {
-      mergedWorktreeAction = decoded
-    } else if let legacyBool = try container.decodeIfPresent(
-      Bool.self, forKey: .automaticallyArchiveMergedWorktrees
-    ) {
-      mergedWorktreeAction = legacyBool ? .archive : nil
-    } else {
-      mergedWorktreeAction = Self.default.mergedWorktreeAction
-    }
+    mergedWorktreeAction = try Self.decodeMergedWorktreeAction(from: container)
     promptForWorktreeCreation =
       try container.decodeIfPresent(Bool.self, forKey: .promptForWorktreeCreation)
       ?? Self.default.promptForWorktreeCreation
@@ -327,23 +318,59 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     autoShowActiveAgentsPanel =
       try container.decodeIfPresent(Bool.self, forKey: .autoShowActiveAgentsPanel)
       ?? Self.default.autoShowActiveAgentsPanel
-    windowTintMode =
+    (windowTintMode, windowTintCustomColor) = try Self.decodeWindowTint(from: container)
+    let toolbarAndDock = try Self.decodeToolbarAndDockSettings(from: container)
+    showRunButtonInToolbar = toolbarAndDock.showRunButtonInToolbar
+    showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar
+    dockBounceMode = toolbarAndDock.dockBounceMode
+    showNotificationDotOnDock = toolbarAndDock.showNotificationDotOnDock
+  }
+
+  private static func decodeWindowTint(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> (WindowTintMode, TintColor) {
+    let mode =
       try container.decodeIfPresent(WindowTintMode.self, forKey: .windowTintMode)
       ?? Self.default.windowTintMode
-    windowTintCustomColor =
+    let customColor =
       try container.decodeIfPresent(TintColor.self, forKey: .windowTintCustomColor)
       ?? Self.default.windowTintCustomColor
-    showRunButtonInToolbar =
-      try container.decodeIfPresent(Bool.self, forKey: .showRunButtonInToolbar)
-      ?? Self.default.showRunButtonInToolbar
-    showDefaultEditorInToolbar =
-      try container.decodeIfPresent(Bool.self, forKey: .showDefaultEditorInToolbar)
-      ?? Self.default.showDefaultEditorInToolbar
-    dockBounceMode =
-      try container.decodeIfPresent(DockBounceMode.self, forKey: .dockBounceMode)
-      ?? Self.default.dockBounceMode
-    showNotificationDotOnDock =
-      try container.decodeIfPresent(Bool.self, forKey: .showNotificationDotOnDock)
-      ?? Self.default.showNotificationDotOnDock
+    return (mode, customColor)
+  }
+
+  private static func decodeMergedWorktreeAction(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> MergedWorktreeAction? {
+    if let decoded = try container.decodeIfPresent(MergedWorktreeAction.self, forKey: .mergedWorktreeAction) {
+      return decoded
+    }
+    if let legacyBool = try container.decodeIfPresent(Bool.self, forKey: .automaticallyArchiveMergedWorktrees) {
+      return legacyBool ? .archive : nil
+    }
+    return Self.default.mergedWorktreeAction
+  }
+
+  /// The toolbar-visibility and Dock-notification preferences, decoded as a
+  /// unit so `init(from:)` stays within the body-length limit.
+  private struct ToolbarAndDockSettings {
+    let showRunButtonInToolbar: Bool
+    let showDefaultEditorInToolbar: Bool
+    let dockBounceMode: DockBounceMode
+    let showNotificationDotOnDock: Bool
+  }
+
+  private static func decodeToolbarAndDockSettings(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> ToolbarAndDockSettings {
+    try ToolbarAndDockSettings(
+      showRunButtonInToolbar: container.decodeIfPresent(Bool.self, forKey: .showRunButtonInToolbar)
+        ?? Self.default.showRunButtonInToolbar,
+      showDefaultEditorInToolbar: container.decodeIfPresent(Bool.self, forKey: .showDefaultEditorInToolbar)
+        ?? Self.default.showDefaultEditorInToolbar,
+      dockBounceMode: container.decodeIfPresent(DockBounceMode.self, forKey: .dockBounceMode)
+        ?? Self.default.dockBounceMode,
+      showNotificationDotOnDock: container.decodeIfPresent(Bool.self, forKey: .showNotificationDotOnDock)
+        ?? Self.default.showNotificationDotOnDock
+    )
   }
 }

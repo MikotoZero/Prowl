@@ -699,10 +699,22 @@ struct WorktreeDetailView: View {
 
     @ToolbarContentBuilder
     private var commandToolbarItems: some ToolbarContent {
-      if toolbarState.showRunButtonInToolbar,
-        toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled
-      {
+      let showRunButton =
+        toolbarState.showRunButtonInToolbar
+        && (toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled)
+      let entries = customCommandEntries
+      let inlineEntries = Array(entries.prefix(3))
+      let overflowEntries = Array(entries.dropFirst(3))
+
+      // One fixed separator in front of the whole Run + Custom Command cluster
+      // keeps it distinct from the Open Editor / notification groups no matter
+      // which items are hidden. Run and the custom commands share one group (no
+      // spacer between them), matching the grouping before the toolbar toggles.
+      if showRunButton || !inlineEntries.isEmpty || !overflowEntries.isEmpty {
         ToolbarSpacer(.fixed)
+      }
+
+      if showRunButton {
         ToolbarItem {
           RunScriptToolbarButton(
             isRunning: toolbarState.runScriptIsRunning,
@@ -724,10 +736,6 @@ struct WorktreeDetailView: View {
           )
         }
       }
-
-      let entries = customCommandEntries
-      let inlineEntries = Array(entries.prefix(3))
-      let overflowEntries = Array(entries.dropFirst(3))
 
       if !inlineEntries.isEmpty {
         ToolbarItemGroup {

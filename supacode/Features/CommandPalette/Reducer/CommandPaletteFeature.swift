@@ -68,6 +68,7 @@ struct CommandPaletteFeature {
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
+      case debugLightDockNotificationDot
     #endif
   }
 
@@ -815,6 +816,14 @@ private func makeClosePullRequestItem(
         category: .debug,
         defaultSuggestion: true
       ),
+      CommandPaletteItem(
+        id: "debug.dock.notification-dot",
+        title: "[Debug] Light Dock Notification Dot",
+        subtitle: "Forces the Dock notification badge on for visual testing",
+        kind: .debugLightDockNotificationDot,
+        category: .debug,
+        defaultSuggestion: true
+      ),
     ]
   }
 #endif
@@ -981,6 +990,8 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
       return .debugTestToast(toast)
     case .debugSimulateUpdateFound:
       return .debugSimulateUpdateFound
+    case .debugLightDockNotificationDot:
+      return .debugLightDockNotificationDot
   #endif
   case .checkForUpdates,
     .openSettings,
@@ -1119,7 +1130,7 @@ private func pullRequestDelegateAction(
     .runCustomCommand:
     return nil
   #if DEBUG
-    case .debugTestToast, .debugSimulateUpdateFound:
+    case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
       return nil
   #endif
   }
