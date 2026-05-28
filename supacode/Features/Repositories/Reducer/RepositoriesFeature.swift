@@ -242,7 +242,6 @@ struct RepositoriesFeature {
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var remoteInfoByRepositoryID: [Repository.ID: GithubRemoteInfo] = [:]
-    @Shared(.appStorage("githubBatchedPullRequestRefreshEnabled")) var batchedPullRequestRefreshEnabled = false
     var codeHostByRepositoryID: [Repository.ID: CodeHost] = [:]
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
     var nextPendingSidebarRevealID = 0
@@ -1256,52 +1255,6 @@ struct RepositoriesFeature {
       let meaningful = detected.filter { $0.value != .unknown }
       guard !meaningful.isEmpty else { return }
       await send(.codeHostsDetected(meaningful))
-    }
-  }
-
-  func refreshRepositoryPullRequests(
-    repositoryID: Repository.ID,
-    repositoryRootURL: URL,
-    worktrees: [Worktree],
-    branches: [String]
-  ) -> Effect<Action> {
-    let gitClient = gitClient
-    let githubCLI = githubCLI
-    return .run { send in
-      guard
-        let remoteInfo = await Self.resolveGithubRemoteInfo(
-          repositoryRootURL: repositoryRootURL,
-          githubCLI: githubCLI,
-          gitClient: gitClient
-        )
-      else {
-        await send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
-        return
-      }
-      do {
-        let prsByBranch = try await githubCLI.batchPullRequests(
-          remoteInfo.host,
-          remoteInfo.owner,
-          remoteInfo.repo,
-          branches
-        )
-        var pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
-        for worktree in worktrees {
-          pullRequestsByWorktreeID[worktree.id] = prsByBranch[worktree.name]
-        }
-        await send(
-          .githubIntegration(
-            .repositoryPullRequestsLoaded(
-              repositoryID: repositoryID,
-              pullRequestsByWorktreeID: pullRequestsByWorktreeID
-            )
-          )
-        )
-      } catch {
-        await send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
-        return
-      }
-      await send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
     }
   }
 

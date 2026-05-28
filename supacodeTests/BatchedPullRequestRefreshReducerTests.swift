@@ -2,49 +2,16 @@ import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
-import Sharing
 import Testing
 
 @testable import supacode
 
 @MainActor
 struct BatchedPullRequestRefreshReducerTests {
-  @Test func batchedFlagOffStillRunsLegacyBatchPullRequests() async {
-    let context = makeContext()
-    let store = TestStore(initialState: context.state) {
-      RepositoriesFeature()
-    } withDependencies: {
-      $0.gitClient.remoteInfo = { _ in context.remoteInfo }
-      $0.githubCLI.resolveRemoteInfo = { _ in context.remoteInfo }
-      $0.githubCLI.batchPullRequests = { _, _, _, _ in [:] }
-      $0.pullRequestRefreshCoordinator = .unimplemented
-    }
-    // Flag default false → exercises legacy code path; assert no coordinator call by relying on
-    // the unimplemented default coordinator which does nothing.
-
-    await store.send(
-      .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(
-          repositoryRootURL: context.repoRootURL,
-          worktreeIDs: context.worktreeIDs
-        )
-      )
-    )
-    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
-      $0.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
-    }
-    await store.receive(\.githubIntegration.repositoryPullRequestsLoaded)
-    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
-      $0.inFlightPullRequestRefreshRepositoryIDs = []
-    }
-    await store.finish()
-  }
-
-  @Test func batchedFlagOnDispatchesViaCoordinatorWhenRemoteInfoCached() async {
+  @Test func refreshDispatchesViaCoordinatorWhenRemoteInfoCached() async {
     let context = makeContext()
     let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
     var initialState = context.state
-    initialState.$batchedPullRequestRefreshEnabled.withLock { $0 = true }
     initialState.remoteInfoByRepositoryID[context.repository.id] = context.remoteInfo
 
     let store = TestStore(initialState: initialState) {
@@ -89,18 +56,17 @@ struct BatchedPullRequestRefreshReducerTests {
     #expect(request?.branches == ["main", "feature"])
   }
 
-  @Test func batchedFlagOnResolvesAndCachesRemoteInfoOnFirstRun() async {
+  @Test func refreshResolvesAndCachesRemoteInfoOnFirstRun() async {
     let context = makeContext()
     let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
-    var initialState = context.state
-    initialState.$batchedPullRequestRefreshEnabled.withLock { $0 = true }
+    let initialState = context.state
 
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.githubCLI.resolveRemoteInfo = { _ in context.remoteInfo }
-      $0.gitClient.remoteInfo = { _ in
-        Issue.record("git remoteInfo should not be used when gh resolve succeeds")
+      $0.gitClient.remoteInfo = { _ in context.remoteInfo }
+      $0.githubCLI.resolveRemoteInfo = { _ in
+        Issue.record("gh resolveRemoteInfo should not run when git remote resolves")
         return nil
       }
       $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(

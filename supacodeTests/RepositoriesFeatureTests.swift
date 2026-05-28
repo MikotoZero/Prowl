@@ -3546,12 +3546,12 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
-      $0.githubCLI.resolveRemoteInfo = { root in
+      $0.gitClient.remoteInfo = { root in
         #expect(root == URL(fileURLWithPath: repoRoot))
         return upstreamRemoteInfo
       }
-      $0.gitClient.remoteInfo = { _ in
-        Issue.record("git remoteInfo should not be used when gh repo view succeeds")
+      $0.githubCLI.resolveRemoteInfo = { _ in
+        Issue.record("gh resolveRemoteInfo should not run when git remote resolves")
         return nil
       }
       $0.githubCLI.mergePullRequest = { root, remoteInfo, number, _ in
@@ -3843,58 +3843,6 @@ struct RepositoriesFeatureTests {
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
-    await store.finish()
-  }
-
-  @Test func worktreeInfoEventRepositoryPullRequestRefreshPrefersResolvedRemoteInfo() async {
-    let repoRoot = "/tmp/repo"
-    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
-    let featureWorktree = makeWorktree(
-      id: "\(repoRoot)/feature",
-      name: "feature",
-      repoRoot: repoRoot
-    )
-    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
-    let upstreamRemoteInfo = GithubRemoteInfo(host: "github.com", owner: "supabitapp", repo: "supacode")
-    let requestedRemoteInfos = LockIsolated<[GithubRemoteInfo]>([])
-    var initialState = makeState(repositories: [repository])
-    initialState.githubIntegrationAvailability = .available
-    let store = TestStore(initialState: initialState) {
-      RepositoriesFeature()
-    } withDependencies: {
-      $0.githubCLI.resolveRemoteInfo = { root in
-        #expect(root == URL(fileURLWithPath: repoRoot))
-        return upstreamRemoteInfo
-      }
-      $0.gitClient.remoteInfo = { _ in
-        Issue.record("git remoteInfo should not be used when gh repo view succeeds")
-        return nil
-      }
-      $0.githubCLI.batchPullRequests = { host, owner, repo, branches in
-        #expect(branches == ["main", "feature"])
-        requestedRemoteInfos.withValue {
-          $0.append(GithubRemoteInfo(host: host, owner: owner, repo: repo))
-        }
-        return [:]
-      }
-    }
-
-    await store.send(
-      .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(
-          repositoryRootURL: URL(fileURLWithPath: repoRoot),
-          worktreeIDs: [mainWorktree.id, featureWorktree.id]
-        )
-      )
-    )
-    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
-      $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
-    }
-    await store.receive(\.githubIntegration.repositoryPullRequestsLoaded)
-    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
-      $0.inFlightPullRequestRefreshRepositoryIDs = []
-    }
-    #expect(requestedRemoteInfos.value == [upstreamRemoteInfo])
     await store.finish()
   }
 

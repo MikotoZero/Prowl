@@ -12,10 +12,15 @@ extension RepositoriesFeature {
     githubCLI: GithubCLIClient,
     gitClient: GitClientDependency
   ) async -> GithubRemoteInfo? {
-    if let remoteInfo = await githubCLI.resolveRemoteInfo(repositoryRootURL) {
+    // Parsing the local git remote URL is ~20x faster than spawning `gh repo view`
+    // (no gh subprocess, no network round trip). The batched GraphQL query that
+    // follows is itself authoritative about whether the repo exists on GitHub, so
+    // gh is only useful as a fallback for non-standard remotes that the regex in
+    // GitClient cannot parse.
+    if let remoteInfo = await gitClient.remoteInfo(repositoryRootURL) {
       return remoteInfo
     }
-    return await gitClient.remoteInfo(repositoryRootURL)
+    return await githubCLI.resolveRemoteInfo(repositoryRootURL)
   }
 }
 
@@ -75,20 +80,12 @@ extension RepositoriesFeature {
           return .none
         }
         state.inFlightPullRequestRefreshRepositoryIDs.insert(repositoryID)
-        if state.batchedPullRequestRefreshEnabled {
-          return enqueueBatchedPullRequestRefresh(
-            repositoryID: repositoryID,
-            repositoryRootURL: repositoryRootURL,
-            worktrees: worktrees,
-            branches: branches,
-            cachedRemoteInfo: state.remoteInfoByRepositoryID[repositoryID]
-          )
-        }
-        return refreshRepositoryPullRequests(
+        return enqueueBatchedPullRequestRefresh(
           repositoryID: repositoryID,
           repositoryRootURL: repositoryRootURL,
           worktrees: worktrees,
-          branches: branches
+          branches: branches,
+          cachedRemoteInfo: state.remoteInfoByRepositoryID[repositoryID]
         )
       case .unknown:
         queuePullRequestRefresh(
