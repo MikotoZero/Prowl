@@ -45,7 +45,7 @@ final class PullRequestRefreshCoordinator {
     githubCLI: GithubCLIClient,
     clock: any Clock<Duration>,
     debounceWindow: Duration = .milliseconds(250),
-    softTimeout: Duration = .seconds(6),
+    softTimeout: Duration = .seconds(12),
     aliasLimit: Int = 15,
     resultHandler: @MainActor @escaping (Outcome) -> Void
   ) {
@@ -189,19 +189,27 @@ final class PullRequestRefreshCoordinator {
           )
         )
       }
-      for (key, _) in result.failedRepos {
-        guard let request = requestsByKey[key] else {
-          continue
-        }
+      let failedRequests = result.failedRepos.keys.compactMap { requestsByKey[$0] }
+      if !failedRequests.isEmpty {
         // [BPR] remove after manual verification
-        logger.debug("fallback partial repo=\(key.owner)/\(key.repo)")
-        await fallbackPerRepo(request)
+        logger.debug("fallback partial host=\(host) count=\(failedRequests.count)")
+        await fanOutFallback(failedRequests)
       }
     } catch {
       // [BPR] remove after manual verification
       logger.debug("fallback batch host=\(host) error=\(String(describing: error))")
+      await fanOutFallback(requests)
+    }
+  }
+
+  private func fanOutFallback(_ requests: [Request]) async {
+    // Run per-repo fallback requests concurrently; serial awaits here would multiply
+    // a slow recovery path by the number of repos in the batch.
+    await withTaskGroup(of: Void.self) { group in
       for request in requests {
-        await fallbackPerRepo(request)
+        group.addTask { [weak self] in
+          await self?.fallbackPerRepo(request)
+        }
       }
     }
   }
