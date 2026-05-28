@@ -161,6 +161,7 @@ struct AppFeatureSettingsChangedTests {
       id: fixedUUID(0),
       worktreeID: "/repo/wt",
       worktreeName: "wt",
+      workingDirectory: nil,
       tabID: TerminalTabID(rawValue: fixedUUID(1)),
       tabTitle: "codex",
       surfaceID: fixedUUID(0),

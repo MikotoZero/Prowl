@@ -78,6 +78,11 @@ struct SidebarListView: View {
       customTitles: state.repositoryCustomTitles,
       repositoryAppearances: repositoryAppearances
     )
+    let agentRowDisplays = Self.activeAgentRowDisplays(
+      entries: state.activeAgents.entries,
+      repositories: state.repositories,
+      metadata: agentWorktreeMetadata
+    )
     let panelHeight = min(resizingPanelHeight ?? state.activeAgents.panelHeight, maximumPanelHeight)
     let panelOffset = state.activeAgents.isPanelHidden ? panelHeight : 0
     let activeAgentsPanelTopGap = 4.0
@@ -152,9 +157,7 @@ struct SidebarListView: View {
       .overlay(alignment: .bottom) {
         ActiveAgentsPanel(
           store: store.scope(state: \.activeAgents, action: \.activeAgents),
-          repositoryNamesByWorktreeID: agentWorktreeMetadata.repositoryNamesByWorktreeID,
-          branchNamesByWorktreeID: agentWorktreeMetadata.branchNamesByWorktreeID,
-          repositoryColorsByWorktreeID: agentWorktreeMetadata.repositoryColorsByWorktreeID,
+          rowDisplays: agentRowDisplays,
           selectedSurfaceID: selectedSurfaceID,
           navigationShortcutHint: activeAgentsShortcutHint,
           height: panelHeight,
@@ -527,12 +530,92 @@ struct SidebarListView: View {
       repositoryColorsByWorktreeID: repositoryColorsByWorktreeID
     )
   }
+
+  /// Resolves the repository/branch label shown for each active agent from the directory the
+  /// agent actually runs in, rather than the tab's owning worktree.
+  static func activeAgentRowDisplays(
+    entries: IdentifiedArrayOf<ActiveAgentEntry>,
+    repositories: IdentifiedArrayOf<Repository>,
+    metadata: ActiveAgentWorktreeMetadata
+  ) -> [ActiveAgentEntry.ID: ActiveAgentRowDisplay] {
+    var displays: [ActiveAgentEntry.ID: ActiveAgentRowDisplay] = [:]
+    for entry in entries {
+      displays[entry.id] = activeAgentRowDisplay(
+        for: entry,
+        repositories: repositories,
+        metadata: metadata
+      )
+    }
+    return displays
+  }
+
+  /// Three-tier resolution for the displayed name/branch of a single agent:
+  /// 1. `workingDirectory` falls inside a known repo/worktree → use it, so the label tracks live
+  ///    branch renames through `metadata`.
+  /// 2. `workingDirectory` is known but outside every repo → derive a name from its last path
+  ///    component (same logic as adding a repository).
+  /// 3. `workingDirectory` is unknown → fall back to the surface's owning worktree (legacy behavior).
+  static func activeAgentRowDisplay(
+    for entry: ActiveAgentEntry,
+    repositories: IdentifiedArrayOf<Repository>,
+    metadata: ActiveAgentWorktreeMetadata
+  ) -> ActiveAgentRowDisplay {
+    if let workingDirectory = entry.workingDirectory {
+      if let key = resolveWorktreeID(forWorkingDirectory: workingDirectory, in: repositories) {
+        let fallbackName = workingDirectory.lastPathComponent
+        return ActiveAgentRowDisplay(
+          repositoryName: metadata.repositoryNamesByWorktreeID[key] ?? fallbackName,
+          branchName: metadata.branchNamesByWorktreeID[key] ?? fallbackName,
+          color: metadata.repositoryColorsByWorktreeID[key]
+        )
+      }
+      let name = Repository.name(for: workingDirectory)
+      return ActiveAgentRowDisplay(repositoryName: name, branchName: name, color: nil)
+    }
+    return ActiveAgentRowDisplay(
+      repositoryName: metadata.repositoryNamesByWorktreeID[entry.worktreeID] ?? entry.worktreeName,
+      branchName: metadata.branchNamesByWorktreeID[entry.worktreeID] ?? entry.worktreeName,
+      color: metadata.repositoryColorsByWorktreeID[entry.worktreeID]
+    )
+  }
+
+  /// Finds the most specific repo/worktree whose directory contains `workingDirectory`. Plain
+  /// folders are keyed by their repository id (matching `activeAgentWorktreeMetadata`); git repos
+  /// are matched through their worktrees (the main worktree covers the repo root). When nested
+  /// directories both match (e.g. a worktree inside a repo), the deepest one wins.
+  static func resolveWorktreeID(
+    forWorkingDirectory workingDirectory: URL,
+    in repositories: IdentifiedArrayOf<Repository>
+  ) -> Worktree.ID? {
+    var best: (id: Worktree.ID, depth: Int)?
+    func consider(id: Worktree.ID, directory: URL) {
+      guard PathPolicy.contains(workingDirectory, in: directory) else { return }
+      let depth = PathPolicy.normalizeURL(directory).pathComponents.count
+      if let current = best, current.depth >= depth { return }
+      best = (id, depth)
+    }
+    for repository in repositories {
+      if repository.capabilities.supportsRunnableFolderActions, !repository.capabilities.supportsWorktrees {
+        consider(id: repository.id, directory: repository.rootURL)
+      }
+      for worktree in repository.worktrees {
+        consider(id: worktree.id, directory: worktree.workingDirectory)
+      }
+    }
+    return best?.id
+  }
 }
 
 struct ActiveAgentWorktreeMetadata: Equatable {
   let repositoryNamesByWorktreeID: [Worktree.ID: String]
   let branchNamesByWorktreeID: [Worktree.ID: String]
   let repositoryColorsByWorktreeID: [Worktree.ID: RepositoryColorChoice]
+}
+
+struct ActiveAgentRowDisplay: Equatable {
+  let repositoryName: String
+  let branchName: String
+  let color: RepositoryColorChoice?
 }
 
 extension SidebarItem {

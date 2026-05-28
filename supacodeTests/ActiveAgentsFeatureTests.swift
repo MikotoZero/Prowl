@@ -171,6 +171,7 @@ struct ActiveAgentsFeatureTests {
       id: id,
       worktreeID: "/repo/wt",
       worktreeName: "wt",
+      workingDirectory: nil,
       tabID: TerminalTabID(rawValue: UUID()),
       tabTitle: "1",
       surfaceID: id,

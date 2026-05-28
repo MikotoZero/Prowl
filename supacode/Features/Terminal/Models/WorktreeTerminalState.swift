@@ -1836,10 +1836,18 @@ final class WorktreeTerminalState {
     let paneIDs = trees[tabId]?.leaves().map(\.id) ?? []
     let paneIndex = paneIDs.firstIndex(of: surfaceID).map { $0 + 1 } ?? 1
     let tabTitle = tabManager.tabs.first(where: { $0.id == tabId })?.displayTitle ?? "?"
+    // Resolve the displayed repository/branch from where the agent actually runs, not the tab's
+    // owning worktree: a user may `cd` into a different repo before launching the agent. Falls
+    // back to the surface's launch directory when the shell hasn't reported a pwd.
+    let workingDirectory = inheritedSurfaceConfig(
+      fromSurfaceId: surfaceID,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB
+    ).workingDirectory
     return ActiveAgentEntry(
       id: surfaceID,
       worktreeID: worktree.id,
       worktreeName: worktree.name,
+      workingDirectory: workingDirectory,
       tabID: tabId,
       tabTitle: tabTitle,
       surfaceID: surfaceID,

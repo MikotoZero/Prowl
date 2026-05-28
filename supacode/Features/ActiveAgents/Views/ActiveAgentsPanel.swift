@@ -4,9 +4,9 @@ import SwiftUI
 
 struct ActiveAgentsPanel: View {
   @Bindable var store: StoreOf<ActiveAgentsFeature>
-  let repositoryNamesByWorktreeID: [Worktree.ID: String]
-  let branchNamesByWorktreeID: [Worktree.ID: String]
-  let repositoryColorsByWorktreeID: [Worktree.ID: RepositoryColorChoice]
+  /// Per-entry repository/branch labels resolved from each agent's working directory by the parent
+  /// (see `SidebarListView.activeAgentRowDisplays`); keeps this view presentational.
+  let rowDisplays: [ActiveAgentEntry.ID: ActiveAgentRowDisplay]
   let selectedSurfaceID: UUID?
   /// Merged "⌥⌃↑↓" hint shown while Cmd is held; `nil` hides it (bindings customized
   /// or Cmd not held). Resolved by the parent so the panel stays presentational.
@@ -121,15 +121,15 @@ struct ActiveAgentsPanel: View {
   }
 
   private func repositoryName(for entry: ActiveAgentEntry) -> String {
-    repositoryNamesByWorktreeID[entry.worktreeID] ?? entry.worktreeName
+    rowDisplays[entry.id]?.repositoryName ?? entry.worktreeName
   }
 
   private func branchName(for entry: ActiveAgentEntry) -> String {
-    branchNamesByWorktreeID[entry.worktreeID] ?? entry.worktreeName
+    rowDisplays[entry.id]?.branchName ?? entry.worktreeName
   }
 
   private func repositoryColor(for entry: ActiveAgentEntry) -> RepositoryColorChoice? {
-    repositoryColorsByWorktreeID[entry.worktreeID]
+    rowDisplays[entry.id]?.color
   }
 
   private func isDimmed(_ entry: ActiveAgentEntry) -> Bool {
