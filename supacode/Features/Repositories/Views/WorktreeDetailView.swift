@@ -20,6 +20,17 @@ struct WorktreeDetailView: View {
     let showDefaultEditorInToolbar: Bool
   }
 
+  private struct CanvasToolbarState {
+    let notificationGroups: [ToolbarNotificationRepositoryGroup]
+    let unseenNotificationWorktreeCount: Int
+    let runScriptEnabled: Bool
+    let runScriptIsRunning: Bool
+    let customCommands: [UserCustomCommand]
+    let isUpdateAvailable: Bool
+    let availableUpdateVersion: String?
+    let showRunButtonInToolbar: Bool
+  }
+
   @Bindable var store: StoreOf<AppFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
@@ -36,6 +47,8 @@ struct WorktreeDetailView: View {
     let selectedRow = repositories.selectedRow(for: repositories.selectedWorktreeID)
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
     let selectedTerminalWorktree = repositories.selectedTerminalWorktree
+    let canvasFocusedTerminalWorktree = canvasFocusedTerminalWorktree(repositories: repositories)
+    let actionTargetWorktree = selectedTerminalWorktree ?? canvasFocusedTerminalWorktree
     let selectedWorktreeSummaries = selectedWorktreeSummaries(from: repositories)
     let showsMultiSelectionSummary = shouldShowMultiSelectionSummary(
       repositories: repositories,
@@ -47,12 +60,12 @@ struct WorktreeDetailView: View {
       repositories: repositories
     )
     let hasActiveTerminalTarget =
-      selectedTerminalWorktree != nil
+      actionTargetWorktree != nil
       && loadingInfo == nil
       && !showsMultiSelectionSummary
     let openActionSelection = state.openActionSelection
     let runScriptEnabled = hasActiveTerminalTarget
-    let runScriptIsRunning = selectedTerminalWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
+    let runScriptIsRunning = actionTargetWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
     let customCommands = state.selectedCustomCommands
     let notificationGroups = repositories.toolbarNotificationGroups(
       terminalManager: terminalManager,
@@ -73,10 +86,16 @@ struct WorktreeDetailView: View {
     .toolbar {
       if repositories.isShowingCanvas {
         canvasToolbarContent(
-          notificationGroups: notificationGroups,
-          unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
-          isUpdateAvailable: state.updates.isUpdateAvailable,
-          availableUpdateVersion: state.updates.availableVersion
+          state: CanvasToolbarState(
+            notificationGroups: notificationGroups,
+            unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
+            runScriptEnabled: runScriptEnabled,
+            runScriptIsRunning: runScriptIsRunning,
+            customCommands: customCommands,
+            isUpdateAvailable: state.updates.isUpdateAvailable,
+            availableUpdateVersion: state.updates.availableVersion,
+            showRunButtonInToolbar: settingsFile.global.showRunButtonInToolbar
+          )
         )
       } else if hasActiveTerminalTarget,
         let toolbarState = toolbarState(
@@ -101,7 +120,7 @@ struct WorktreeDetailView: View {
           toolbarState: toolbarState,
           repositories: repositories,
           selectedWorktree: selectedWorktree,
-          selectedTerminalWorktree: selectedTerminalWorktree,
+          actionTargetWorktree: actionTargetWorktree,
           notificationGroups: notificationGroups
         )
       }
@@ -121,7 +140,7 @@ struct WorktreeDetailView: View {
     toolbarState: WorktreeToolbarState,
     repositories: RepositoriesFeature.State,
     selectedWorktree: Worktree?,
-    selectedTerminalWorktree: Worktree?,
+    actionTargetWorktree: Worktree?,
     notificationGroups: [ToolbarNotificationRepositoryGroup]
   ) -> some ToolbarContent {
     WorktreeToolbarContent(
@@ -144,9 +163,9 @@ struct WorktreeDetailView: View {
         store.send(.openActionSelectionChanged(action))
       },
       onCopyPath: {
-        guard let selectedTerminalWorktree else { return }
+        guard let actionTargetWorktree else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(selectedTerminalWorktree.workingDirectory.path, forType: .string)
+        NSPasteboard.general.setString(actionTargetWorktree.workingDirectory.path, forType: .string)
       },
       onSelectNotification: selectToolbarNotification,
       onDismissAllNotifications: { dismissAllToolbarNotifications(in: notificationGroups) },
@@ -161,21 +180,102 @@ struct WorktreeDetailView: View {
 
   @ToolbarContentBuilder
   private func canvasToolbarContent(
-    notificationGroups: [ToolbarNotificationRepositoryGroup],
-    unseenNotificationWorktreeCount: Int,
-    isUpdateAvailable: Bool,
-    availableUpdateVersion: String?
+    state: CanvasToolbarState
   ) -> some ToolbarContent {
     ToolbarItemGroup(placement: .primaryAction) {
       ToolbarNotificationsPopoverButton(
-        groups: notificationGroups,
-        unseenWorktreeCount: unseenNotificationWorktreeCount,
+        groups: state.notificationGroups,
+        unseenWorktreeCount: state.unseenNotificationWorktreeCount,
         onSelectNotification: selectToolbarNotification,
-        onDismissAll: { dismissAllToolbarNotifications(in: notificationGroups) }
+        onDismissAll: { dismissAllToolbarNotifications(in: state.notificationGroups) }
       )
-      if isUpdateAvailable {
-        ToolbarUpdateButton(availableVersion: availableUpdateVersion) {
+      if state.isUpdateAvailable {
+        ToolbarUpdateButton(availableVersion: state.availableUpdateVersion) {
           store.send(.updates(.checkForUpdates))
+        }
+      }
+    }
+
+    let showRunButton =
+      state.showRunButtonInToolbar
+      && (state.runScriptIsRunning || state.runScriptEnabled)
+    let inlineCommands = Array(state.customCommands.enumerated().prefix(3))
+    let overflowCommands = Array(state.customCommands.enumerated().dropFirst(3))
+    // A fixed separator splits the Run + Custom Command cluster from the
+    // notification group, mirroring the Normal toolbar.
+    //
+    // INTENTIONAL DIVERGENCE FROM THE NORMAL TOOLBAR: the whole cluster is a
+    // single `ToolbarItem` (an HStack) here, whereas `commandToolbarItems`
+    // (Normal mode) lays the buttons out as separate items / a
+    // `ToolbarItemGroup`. The reason is how each mode updates NSToolbar (which
+    // SwiftUI's `.toolbar` bridges to):
+    //   - Normal: switching worktree swaps the whole detail view, so NSToolbar
+    //     is rebuilt wholesale — no per-item diff, no animation.
+    //   - Canvas: `CanvasView` stays mounted across card switches; only the
+    //     toolbar items change. With a multi-item structure NSToolbar performs
+    //     an incremental insert/remove with its own animation (which SwiftUI
+    //     transactions can't suppress), briefly overflowing the toolbar — the
+    //     visible "jump" when switching between cards with different command
+    //     counts.
+    // Collapsing the cluster into one item keeps NSToolbar's item set stable,
+    // so a command-count change is just an internal HStack relayout. Do NOT
+    // "unify" this back into a `ToolbarItemGroup` to match Normal — that
+    // reintroduces the jump.
+    if showRunButton || !state.customCommands.isEmpty {
+      ToolbarSpacer(.fixed)
+      ToolbarItem(placement: .primaryAction) {
+        // `spacing: 0` keeps the cluster as tight as the Normal toolbar's
+        // ToolbarItemGroup (whose buttons sit nearly flush on macOS 26); the
+        // buttons' own internal padding provides the visible gap.
+        HStack(spacing: 0) {
+          if showRunButton {
+            RunScriptToolbarButton(
+              isRunning: state.runScriptIsRunning,
+              isEnabled: state.runScriptEnabled,
+              runHelpText: AppShortcuts.helpText(
+                title: "Run Script",
+                commandID: AppShortcuts.CommandID.runScript,
+                in: store.resolvedKeybindings
+              ),
+              stopHelpText: AppShortcuts.helpText(
+                title: "Stop Script",
+                commandID: AppShortcuts.CommandID.stopScript,
+                in: store.resolvedKeybindings
+              ),
+              runShortcut: store.resolvedKeybindings.display(for: AppShortcuts.CommandID.runScript),
+              stopShortcut: store.resolvedKeybindings.display(for: AppShortcuts.CommandID.stopScript),
+              runAction: { store.send(.runScript) },
+              stopAction: { store.send(.stopRunScript) }
+            )
+          }
+          ForEach(inlineCommands, id: \.element.id) { index, command in
+            UserCustomCommandToolbarButton(
+              title: command.resolvedTitle,
+              systemImage: command.resolvedSystemImage,
+              shortcut: store.resolvedKeybindings.display(
+                for: LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
+              ),
+              isEnabled: command.hasRunnableCommand,
+              action: {
+                store.send(.runCustomCommand(index))
+              }
+            )
+          }
+          if !overflowCommands.isEmpty {
+            CustomCommandOverflowButton(
+              entries: overflowCommands.map {
+                (index: $0.offset, command: $0.element)
+              },
+              shortcutDisplay: { command in
+                store.resolvedKeybindings.display(
+                  for: LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
+                )
+              },
+              onRunCustomCommand: { index in
+                store.send(.runCustomCommand(index))
+              }
+            )
+          }
         }
       }
     }
@@ -248,6 +348,30 @@ struct WorktreeDetailView: View {
       && selectedWorktreeSummaries.count > 1
   }
 
+  private func canvasFocusedTerminalWorktree(repositories: RepositoriesFeature.State) -> Worktree? {
+    guard repositories.isShowingCanvas,
+      let worktreeID = terminalManager.canvasFocusedWorktreeID
+    else {
+      return nil
+    }
+    if let worktree = repositories.worktree(for: worktreeID) {
+      return worktree
+    }
+    guard let repository = repositories.repositories[id: worktreeID],
+      repository.capabilities.supportsRunnableFolderActions,
+      !repository.capabilities.supportsWorktrees
+    else {
+      return nil
+    }
+    return Worktree(
+      id: repository.id,
+      name: repository.name,
+      detail: repository.rootURL.path(percentEncoded: false),
+      workingDirectory: repository.rootURL,
+      repositoryRootURL: repository.rootURL
+    )
+  }
+
   @ViewBuilder
   private func detailContent(
     repositories: RepositoriesFeature.State,
@@ -262,6 +386,9 @@ struct WorktreeDetailView: View {
         repositoryCustomTitles: repositories.repositoryCustomTitles,
         onExitToTab: {
           store.send(.repositories(.toggleCanvas))
+        },
+        onFocusedWorktreeChanged: { worktreeID in
+          store.send(.canvasFocusedWorktreeChanged(worktreeID))
         }
       )
       // Canvas tints the nav (leading) only; the toolbar is left untinted so
