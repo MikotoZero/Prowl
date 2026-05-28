@@ -615,7 +615,11 @@ final class WorktreeInfoWatcherManager {
     repositoryRootURL: URL,
     interval: Duration
   ) -> Duration {
-    stablePhaseOffset(seed: repositoryRootURL.path(percentEncoded: false), interval: interval)
+    // PR refresh is now coalesced by PullRequestRefreshCoordinator, so emitting
+    // every repo on the same tick maximises the chance of folding into a single
+    // batched GraphQL query. The injectable parameter is kept so tests can still
+    // stagger emits when they need to assert ordering.
+    .zero
   }
 
   private static func defaultWorktreeFileEventMonitorFactory(
