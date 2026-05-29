@@ -117,6 +117,24 @@ struct WorktreeTerminalManagerTests {
     #expect(state.surfaceView(for: tabId) == nil)
   }
 
+  @Test func ghosttyCloseRequestDoesNotRecreateSurfaceForClosedTab() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+    let surface = try #require(state.surfaceView(for: surfaceId))
+
+    surface.bridge.closeSurface(processAlive: false)
+    let staleTree = state.splitTree(for: tabId)
+
+    #expect(staleTree.isEmpty)
+    #expect(state.tabManager.tabs.isEmpty)
+    #expect(state.surfaceView(for: surfaceId) == nil)
+    #expect(state.surfaceView(for: tabId) == nil)
+  }
+
   @Test func notificationIndicatorUsesCurrentCountOnStreamStart() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()
