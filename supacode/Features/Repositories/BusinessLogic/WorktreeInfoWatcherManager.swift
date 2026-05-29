@@ -744,11 +744,7 @@ private final class FSEventsWorktreeFileEventMonitor: WorktreeFileEventMonitorin
     guard let stream else {
       return nil
     }
-    FSEventStreamScheduleWithRunLoop(
-      stream,
-      CFRunLoopGetMain(),
-      CFRunLoopMode.defaultMode.rawValue
-    )
+    FSEventStreamSetDispatchQueue(stream, DispatchQueue.main)
     guard FSEventStreamStart(stream) else {
       FSEventStreamInvalidate(stream)
       FSEventStreamRelease(stream)
