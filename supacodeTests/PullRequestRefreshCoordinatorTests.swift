@@ -398,7 +398,6 @@ private func makeCoordinator(
   outcomes: OutcomeCollector,
   debounce: Duration = .milliseconds(250),
   softTimeout: Duration = .seconds(6),
-  aliasLimit: Int = 15,
   batched:
     @escaping @Sendable (String, [CrossRepoPullRequestRequest]) async throws ->
     CrossRepoPullRequestResult,
@@ -419,8 +418,7 @@ private func makeCoordinator(
     githubCLI: client,
     clock: clock,
     debounceWindow: debounce,
-    softTimeout: softTimeout,
-    aliasLimit: aliasLimit
+    softTimeout: softTimeout
   ) { outcome in
     Task { await outcomes.record(outcome) }
   }

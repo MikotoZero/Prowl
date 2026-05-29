@@ -31,7 +31,6 @@ final class PullRequestRefreshCoordinator {
   private let clock: any Clock<Duration>
   private let debounceWindow: Duration
   private let softTimeout: Duration
-  private let aliasLimit: Int
   private let resultHandler: @MainActor (Outcome) -> Void
 
   private var pendingByHost: [String: [Repository.ID: Request]] = [:]
@@ -44,21 +43,21 @@ final class PullRequestRefreshCoordinator {
     clock: any Clock<Duration>,
     debounceWindow: Duration = .milliseconds(250),
     softTimeout: Duration = .seconds(12),
-    aliasLimit: Int = 15,
     resultHandler: @MainActor @escaping (Outcome) -> Void
   ) {
     self.githubCLI = githubCLI
     self.clock = clock
     self.debounceWindow = debounceWindow
     self.softTimeout = softTimeout
-    self.aliasLimit = aliasLimit
     self.resultHandler = resultHandler
   }
 
   func enqueue(_ request: Request) {
-    // Sanitize branches at the gate: silently drop a request that contributes nothing.
-    let cleanedBranches = request.branches.filter {
-      !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    // Trim and drop whitespace-only entries so "feat" and "feat " do not get treated as
+    // distinct branches downstream and don't leak padding into the GraphQL headRefName.
+    let cleanedBranches = request.branches.compactMap { branch -> String? in
+      let trimmed = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
     }
     guard !cleanedBranches.isEmpty else {
       return
