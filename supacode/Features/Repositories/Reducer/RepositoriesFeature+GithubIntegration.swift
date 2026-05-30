@@ -53,6 +53,10 @@ extension RepositoriesFeature {
       .cancellable(id: CancelID.delayedPRRefresh(worktreeID), cancelInFlight: true)
 
     case .repositoryPullRequestRefreshRequested(let repositoryRootURL, let worktreeIDs):
+      @Shared(.repositorySettings(repositoryRootURL)) var repositorySettings
+      guard repositorySettings.fetchesPullRequestState else {
+        return .none
+      }
       let worktrees = worktreeIDs.compactMap { state.worktree(for: $0) }
       guard let firstWorktree = worktrees.first,
         let repositoryID = state.repositoryID(containing: firstWorktree.id)

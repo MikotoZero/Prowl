@@ -67,6 +67,14 @@ struct RepositorySettingsView: View {
       get: { settings.customTitle.wrappedValue ?? "" },
       set: { settings.customTitle.wrappedValue = $0 },
     )
+    let observeLineDiffsAutomatically = Binding(
+      get: { settings.observeLineDiffsAutomatically.wrappedValue ?? true },
+      set: { settings.observeLineDiffsAutomatically.wrappedValue = $0 },
+    )
+    let fetchPullRequestState = Binding(
+      get: { settings.fetchPullRequestState.wrappedValue ?? true },
+      set: { settings.fetchPullRequestState.wrappedValue = $0 },
+    )
     let exampleWorktreePath = store.exampleWorktreePath
     let folderName = Repository.name(for: store.rootURL)
 
@@ -185,24 +193,52 @@ struct RepositorySettingsView: View {
         }
       }
 
-      if store.showsPullRequestSettings {
+      if store.showsDiffsAndPullRequestSettings {
         Section {
-          Picker(selection: settings.pullRequestMergeStrategy) {
-            Text(
-              "Global \(Text(store.globalPullRequestMergeStrategy.title).foregroundStyle(.secondary))"
-            )
-            .tag(PullRequestMergeStrategy?.none)
-            ForEach(PullRequestMergeStrategy.allCases) { strategy in
-              Text(strategy.title).tag(PullRequestMergeStrategy?.some(strategy))
+          if store.showsDiffSettings {
+            Toggle(isOn: observeLineDiffsAutomatically) {
+              Text("Observe line diffs automatically")
+              Text(
+                "Keeps each workspace's line-change badge up to date in the background. "
+                  + "Turn off for very large repositories to avoid background git diff work."
+              )
             }
-          } label: {
-            Text("Merge strategy")
-            Text("Used when merging PRs from the command palette.")
+            .help(
+              "Refresh workspace line-change badges automatically. "
+                + "Disable to skip background git diff for large repositories."
+            )
+          }
+
+          if store.showsPullRequestSettings {
+            Toggle(isOn: fetchPullRequestState) {
+              Text("Fetch pull request state")
+              Text(
+                "Periodically checks pull request status (open, merged, checks) for this repository's branches. "
+                  + "Turn off to skip background GitHub queries."
+              )
+            }
+            .help(
+              "Fetch pull request status for this repository's branches. "
+                + "Disable to skip background GitHub queries and save API rate limit."
+            )
+
+            Picker(selection: settings.pullRequestMergeStrategy) {
+              Text(
+                "Global \(Text(store.globalPullRequestMergeStrategy.title).foregroundStyle(.secondary))"
+              )
+              .tag(PullRequestMergeStrategy?.none)
+              ForEach(PullRequestMergeStrategy.allCases) { strategy in
+                Text(strategy.title).tag(PullRequestMergeStrategy?.some(strategy))
+              }
+            } label: {
+              Text("Merge strategy")
+              Text("Used when merging PRs from the command palette.")
+            }
           }
         } header: {
           VStack(alignment: .leading, spacing: 4) {
-            Text("Pull Requests")
-            Text("Used when merging PRs from the command palette")
+            Text("Diffs & Pull Requests")
+            Text("Background refresh of line-change badges and pull request status")
               .foregroundStyle(.secondary)
           }
         }

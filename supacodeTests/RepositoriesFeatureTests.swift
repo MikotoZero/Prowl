@@ -263,6 +263,35 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test(.dependencies) func filesChangedSkipsLineChangesWhenObservationDisabled() async {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: 12,
+      removedLines: 4,
+      pullRequest: nil
+    )
+
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock { $0.observeLineDiffsAutomatically = false }
+
+    let lineChangeRequests = LockIsolated(0)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.lineChanges = { _ in
+        lineChangeRequests.withValue { $0 += 1 }
+        return (15, 9)
+      }
+    }
+
+    await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.finish()
+
+    #expect(lineChangeRequests.value == 0)
+  }
+
   @Test func repositoryWorktreesChangedReloadsRepositories() async {
     let existingWorktree = makeWorktree(id: "/tmp/repo/main", name: "main")
     let discoveredWorktree = makeWorktree(id: "/tmp/repo/feature", name: "feature")

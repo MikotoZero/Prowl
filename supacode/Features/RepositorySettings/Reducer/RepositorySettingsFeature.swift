@@ -39,8 +39,16 @@ struct RepositorySettingsFeature {
       capabilities.supportsWorktrees
     }
 
+    var showsDiffSettings: Bool {
+      capabilities.supportsDiff
+    }
+
     var showsPullRequestSettings: Bool {
       capabilities.supportsPullRequests
+    }
+
+    var showsDiffsAndPullRequestSettings: Bool {
+      showsDiffSettings || showsPullRequestSettings
     }
 
     var showsSetupScriptSettings: Bool {

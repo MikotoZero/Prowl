@@ -169,6 +169,41 @@ struct BatchedPullRequestRefreshReducerTests {
     }
     await store.finish()
   }
+
+  @Test(.dependencies) func refreshSkippedWhenPullRequestStateFetchDisabled() async {
+    let context = makeContext()
+    let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
+    var initialState = context.state
+    initialState.remoteInfoByRepositoryID[context.repository.id] = context.remoteInfo
+
+    @Shared(.repositorySettings(context.repoRootURL)) var repositorySettings
+    $repositorySettings.withLock { $0.fetchPullRequestState = false }
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(
+        enqueue: { request in
+          enqueued.withValue { $0.append(request) }
+        },
+        cancelHost: { _ in },
+        reset: {}
+      )
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: context.repoRootURL,
+          worktreeIDs: context.worktreeIDs
+        )
+      )
+    )
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested)
+    await store.finish()
+
+    #expect(enqueued.value.isEmpty)
+  }
 }
 
 // MARK: - Fixtures

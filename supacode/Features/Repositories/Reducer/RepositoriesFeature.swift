@@ -1189,6 +1189,10 @@ struct RepositoriesFeature {
             guard let worktree = state.worktree(for: worktreeID) else {
               return .none
             }
+            @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+            guard repositorySettings.observesLineDiffsAutomatically else {
+              return .none
+            }
             let worktreeURL = worktree.workingDirectory
             let gitClient = gitClient
             let previousLineChanges = normalizedLineChanges(state.worktreeInfoByID[worktreeID])
