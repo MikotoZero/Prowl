@@ -20,7 +20,7 @@ struct DeleteWorktreeConfirmationView: View {
         "Also delete local branch",
         isOn: Binding(
           get: { confirmation.deleteBranch },
-          set: onDeleteBranchChanged
+          set: { onDeleteBranchChanged($0) }
         )
       )
       .help("Try to delete the local branch with git branch -d after removing the worktree.")
