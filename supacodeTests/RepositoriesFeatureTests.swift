@@ -2262,22 +2262,99 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
-      TextState("🚨 Delete worktree?")
-    } actions: {
-      ButtonState(role: .destructive, action: .confirmDeleteWorktree(worktree.id, repository.id)) {
-        TextState("Delete (⌘↩)")
-      }
-      ButtonState(role: .cancel) {
-        TextState("Cancel")
-      }
-    } message: {
-      TextState("Delete \(worktree.name)? This deletes the worktree directory and its local branch.")
+    await store.send(.worktreeLifecycle(.requestDeleteWorktree(worktree.id, repository.id))) {
+      $0.deleteWorktreeConfirmation = DeleteWorktreeConfirmation(
+        id: 0,
+        title: "Delete worktree?",
+        message: "Delete \(worktree.name)? The worktree directory will be removed.",
+        targets: [RepositoriesFeature.DeleteWorktreeTarget(worktreeID: worktree.id, repositoryID: repository.id)],
+        deleteBranch: false
+      )
+      $0.nextDeleteWorktreeConfirmationID = 1
+    }
+  }
+
+  @Test(.dependencies) func requestDeleteProwlCreatedWorktreeCanPreselectBranchDeletion() async {
+    let worktree = makeWorktree(id: "/tmp/wt", name: "owl")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    state.$prowlCreatedWorktreeIDs.withLock {
+      $0 = [worktree.id]
+    }
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.deleteBranchOnDeleteWorktree = true
+    }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
     }
 
     await store.send(.worktreeLifecycle(.requestDeleteWorktree(worktree.id, repository.id))) {
-      $0.alert = expectedAlert
+      $0.deleteWorktreeConfirmation = DeleteWorktreeConfirmation(
+        id: 0,
+        title: "Delete worktree?",
+        message: "Delete \(worktree.name)? The worktree directory will be removed.",
+        targets: [RepositoriesFeature.DeleteWorktreeTarget(worktreeID: worktree.id, repositoryID: repository.id)],
+        deleteBranch: true
+      )
+      $0.nextDeleteWorktreeConfirmationID = 1
     }
+  }
+
+  @Test(.dependencies) func deletePromptConfirmedAsksBeforeForceDeletingBranch() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let worktree = makeWorktree(id: "\(repoRoot)/feature", name: "feature", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, worktree])
+    var state = makeState(repositories: [repository])
+    state.deleteWorktreeConfirmation = DeleteWorktreeConfirmation(
+      id: 0,
+      title: "Delete worktree?",
+      message: "Delete feature? The worktree directory will be removed.",
+      targets: [RepositoriesFeature.DeleteWorktreeTarget(worktreeID: worktree.id, repositoryID: repository.id)],
+      deleteBranch: true
+    )
+    let forceDeleteAttempts = LockIsolated<[Bool]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.removeWorktree = { worktree, deleteBranch in
+        #expect(deleteBranch == false)
+        return worktree.workingDirectory
+      }
+      $0.gitClient.deleteLocalBranch = { _, _, force in
+        forceDeleteAttempts.withValue { $0.append(force) }
+        if force {
+          return .deleted
+        }
+        throw GitClientError.commandFailed(command: "git branch -d feature", message: "not fully merged")
+      }
+      $0.gitClient.worktrees = { _ in [mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.worktreeLifecycle(.deleteWorktreePromptConfirmed)) {
+      $0.deleteWorktreeConfirmation = nil
+    }
+    await store.receive(\.worktreeLifecycle.deleteWorktreeConfirmed) {
+      $0.deletingWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.worktreeLifecycle.worktreeDeleted) {
+      $0.deletingWorktreeIDs = []
+      $0.repositories = [makeRepository(id: repoRoot, worktrees: [mainWorktree])]
+      #expect($0.alert != nil)
+    }
+    await store.send(
+      .alert(
+        .presented(
+          .confirmForceDeleteBranch(
+            ForceDeleteBranchRequest(
+              branchName: "feature",
+              repositoryRootURL: URL(fileURLWithPath: repoRoot),
+              errorMessage: "Git command failed: git branch -d feature\nnot fully merged"
+            )))))
+
+    #expect(forceDeleteAttempts.value == [false, true])
   }
 
   @Test func requestDeleteMainWorktreeShowsNotAllowedAlert() async {
@@ -2314,21 +2391,15 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
-      TextState("🚨 Delete 2 worktrees?")
-    } actions: {
-      ButtonState(role: .destructive, action: .confirmDeleteWorktrees(targets)) {
-        TextState("Delete 2 (⌘↩)")
-      }
-      ButtonState(role: .cancel) {
-        TextState("Cancel")
-      }
-    } message: {
-      TextState("Delete 2 worktrees? This deletes the worktree directories and their local branches.")
-    }
-
     await store.send(.worktreeLifecycle(.requestDeleteWorktrees(targets))) {
-      $0.alert = expectedAlert
+      $0.deleteWorktreeConfirmation = DeleteWorktreeConfirmation(
+        id: 0,
+        title: "Delete 2 worktrees?",
+        message: "Delete 2 worktrees? Their worktree directories will be removed.",
+        targets: targets,
+        deleteBranch: false
+      )
+      $0.nextDeleteWorktreeConfirmationID = 1
     }
   }
 
@@ -3228,7 +3299,8 @@ struct RepositoriesFeatureTests {
           removedWorktree.id,
           repositoryID: repository.id,
           selectionWasRemoved: false,
-          nextSelection: nil
+          nextSelection: nil,
+          forceDeleteBranchRequest: nil
         ))
     ) {
       $0.deletingWorktreeIDs = []
@@ -3268,7 +3340,8 @@ struct RepositoriesFeatureTests {
           removedWorktree.id,
           repositoryID: repository.id,
           selectionWasRemoved: false,
-          nextSelection: nil
+          nextSelection: nil,
+          forceDeleteBranchRequest: nil
         ))
     ) {
       $0.deletingWorktreeIDs = []
@@ -3320,6 +3393,9 @@ struct RepositoriesFeatureTests {
       $0.pendingWorktrees = []
       $0.selection = .worktree(newWorktree.id)
       $0.sidebarSelectedWorktreeIDs = [newWorktree.id]
+      $0.$prowlCreatedWorktreeIDs.withLock {
+        $0.append(newWorktree.id)
+      }
       $0.repositories = [updatedRepository]
     }
 

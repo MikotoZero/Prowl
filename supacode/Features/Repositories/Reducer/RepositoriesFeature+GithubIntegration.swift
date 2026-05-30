@@ -237,9 +237,17 @@ extension RepositoriesFeature {
           }
         )
       case .delete:
+        @Shared(.settingsFile) var settingsFile
         return .merge(
           mergedWorktreeIDs.map { worktreeID in
-            .send(.worktreeLifecycle(.deleteWorktreeConfirmed(worktreeID, repositoryID)))
+            .send(
+              .worktreeLifecycle(
+                .deleteWorktreeConfirmed(
+                  worktreeID,
+                  repositoryID,
+                  deleteBranch: settingsFile.global.deleteBranchOnDeleteWorktree
+                ))
+            )
           }
         )
       case nil:
