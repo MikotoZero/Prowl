@@ -928,12 +928,10 @@ private final class GitWorktreeRegistryMonitor: WorktreeRegistryMonitoring {
     let source = DispatchSource.makeFileSystemObjectSource(
       fileDescriptor: fileDescriptor,
       eventMask: [.write, .rename, .delete, .attrib],
-      queue: DispatchQueue(label: "worktree-registry-watcher.\(url.path(percentEncoded: false))")
+      queue: .main
     )
     source.setEventHandler {
-      Task { @MainActor in
-        onEvent()
-      }
+      onEvent()
     }
     source.setCancelHandler {
       close(fileDescriptor)
