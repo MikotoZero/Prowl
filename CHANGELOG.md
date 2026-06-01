@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.6.1](https://github.com/onevcat/Prowl/releases/tag/v2026.6.1)
+
+### Fixed
+
+- Fixed a crash that occurred when multiple local repositories pointed to the same GitHub remote: pull request refresh now correctly batches and fans out results to all matching repos instead of crashing on a duplicate key.
+- Internal stability improvements.
+
 ## [2026.5.30](https://github.com/onevcat/Prowl/releases/tag/v2026.5.30)
 
 This release adds per-repository background refresh controls, safer worktree branch deletion, and a range of notification and toolbar customization options.
