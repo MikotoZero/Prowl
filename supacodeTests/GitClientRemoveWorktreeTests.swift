@@ -43,7 +43,9 @@ struct GitClientRemoveWorktreeTests {
 
   @Test func removeWorktreeDeletesNonProtectedLocalBranchWhenRequested() async throws {
     let store = ShellCallStore()
-    let worktreePath = "/tmp/repo-feature"
+    let worktreePath = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-repo-feature-\(UUID().uuidString)", directoryHint: .isDirectory)
+      .path(percentEncoded: false)
     let shell = ShellClient(
       run: { _, arguments, _ in
         await store.record(arguments)
