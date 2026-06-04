@@ -9,25 +9,34 @@ Use `prowl` when the user explicitly wants to inspect or control Prowl: reading 
 
 Do not use it just because the current shell happens to be inside a Prowl repository. It is a remote-control interface for the running Prowl GUI app.
 
-## ⚠️ You are probably running *inside* one of these panes
+## ⚠️ Resolve the target by UUID — and know which pane is *you*
 
-If your own session was launched from a Prowl terminal, then **one of the panes `prowl list` returns is you.** `prowl list` does not exclude the caller. Acting on your own pane is self-harm: `prowl key --pane <self> esc` (or `ctrl-c`) interrupts or kills *your own* current request, and `send` injects into your own prompt.
+Targeting is the #1 source of mistakes. Two rules apply to **every** command:
 
-**Before any `send`, `key`, or `focus`, identify your own pane and never target it:**
+**1. Resolve the target from `prowl list --json` by UUID — never from the tab title.**
+A pane's tab *title* is free-form and will lie: a tab titled "MyGreateProject" can actually have `cwd` `/some/other/repo`. Decide the target from `pane.id` (UUID), `worktree.path`, `cwd`, and the `focused` flag — not only the title — then pass the explicit `--pane <id>`.
+
+**2. Know which pane is yourself, because one of them usually is.**
+If your session was launched from a Prowl terminal, `prowl list` includes your own pane (it does not exclude the caller). Your own pane is the `focused` one, with `cwd` matching your `$PWD`:
 
 ```bash
-# Your own pane = the focused one (and its cwd matches your $PWD).
 echo "$PWD"
 prowl list --json | jq -r '.data.items[] | select(.pane.focused == true) | .pane.id'
 ```
 
-Danger signs that a pane you are reading **is yourself**: its content is your own conversation transcript, or it shows a prompt identical to the one you are currently executing. A pane's *tab title* can say anything (e.g. "UniWebView") while its real `cwd` is somewhere else — trust `cwd` and the focused flag, not the title.
+Operating on yourself is **not forbidden** — plenty of self-actions are legitimate: `read` (grab your own scrollback), `focus` (raise the window when a long job finishes), `key cmd-k` (clear), or `send --no-enter` (pre-fill a command for the user to review). What you must avoid is *accidentally* hitting yourself with an **interrupting** action:
 
-To run an agent "over in project X", do **not** reuse a same-looking existing pane. Open a fresh one and confirm its id differs from your own:
+- `key esc` / `ctrl-c` on yourself aborts your own current request.
+- `send` *with* a trailing Enter on yourself submits a prompt to yourself — this is how runaway self-recursion starts.
+- **Omitting `--target`/`--pane` defaults to the focused pane — usually you.** So a bare `prowl send 'x'` or `prowl key ctrl-c` lands on yourself. Always pass an explicit `--pane`.
+
+Danger signs that a pane you're reading **is yourself**: its content is your own transcript, or a prompt identical to the one you're currently running.
+
+To run an agent "over in project X", don't reuse a same-looking existing pane — open a fresh one and confirm its id differs from your own:
 
 ```bash
 prowl open /path/to/project-X --json   # returns a brand-new pane id
-# verify: the returned .data.target.pane.id != your own focused pane id
+# verify: .data.target.pane.id != your own focused pane id
 ```
 
 ## Core Workflow
@@ -71,11 +80,27 @@ Focus a pane:
 prowl focus --pane <pane-id> --json
 ```
 
-Open a path in Prowl:
+Open a path in Prowl. **Side effect:** this *always creates a new tab + pane* for the path — even a non-git path like `/tmp` (`created_tab: true`) — and brings the app to front. To re-focus an already-open worktree without spawning a tab, use `focus`, not `open`:
 
 ```bash
 prowl open /path/to/repo --json
 ```
+
+## `send` / `key` argument shapes
+
+Positional arguments are **position-sensitive** — the count changes their meaning:
+
+| command | 0 args | 1 arg | 2 args |
+|---|---|---|---|
+| `send` | text from **stdin** | text → **current** pane | `<target> <text>` |
+| `key`  | error (`INVALID_ARGUMENT`) | token → **current** pane | `<target> <token>` |
+
+"current pane" = the focused pane = **usually yourself**, so always prefer the explicit `--pane <id>` form over a positional target.
+
+- `key --repeat <1-100>` repeats the token, e.g. `prowl key --pane <id> down --repeat 10` (out-of-range → `INVALID_REPEAT`).
+- `send --no-enter` sends text without a trailing Enter (key Enter yourself later).
+- `send --capture` requires waiting *and* a trailing Enter; it diffs the screen before/after the command, so it **cannot** combine with `--no-wait` or `--no-enter` (either → `INVALID_ARGUMENT`).
+- Don't mix stdin piping and a positional text arg (→ `INVALID_ARGUMENT`).
 
 ## Finding Pane IDs
 
@@ -132,6 +157,52 @@ prowl list --json | jq -r '
 '
 ```
 
+### `idle` does not mean the output finished rendering
+
+`task.status: idle` means the agent's model generation ended — **not** that the
+terminal has finished painting its reply. Claude Code's TUI repaints a long
+markdown answer line by line, and that rendering lags well behind `idle`. So
+reading a pane the instant it goes `idle` (or after a fixed `sleep`) routinely
+catches a half-drawn screen: the visible buffer stops mid-answer with the input
+prompt `❯` right under it. (Measured: at `idle` only the first ~2 of 6 sections
+had rendered; 10s later it still had not finished.) `--last` size does not fix
+this — the rest of the answer is not in the buffer yet.
+
+Two reliable ways to get the **final** output:
+
+1. **`prowl read --wait-stable`** — re-reads the pane on an interval until its
+   content stops changing, then returns the settled snapshot:
+
+   ```bash
+   # bare: 200ms sampling / settle after 800ms quiet / 10s cap
+   prowl read --pane <pane-id> --last 200 --wait-stable --json
+
+   # tuned
+   prowl read --pane <pane-id> --wait-stable \
+     --stable-interval 200 \   # sample every 200ms
+     --stable-period 800 \     # content must hold steady 800ms to count as stable
+     --wait-timeout 10 --json  # give up after 10s, return latest anyway
+   ```
+
+   The JSON gains `stabilized` (true = settled, false = hit the timeout),
+   `waited_ms`, and `samples`. Prefer this over manual `sleep`-then-`read`. The
+   `--stable-*` options only work **with** `--wait-stable` — passing them alone
+   returns `INVALID_ARGUMENT`.
+
+   Note this still only sees the rendered buffer, so content Claude Code has
+   **folded** (`⎿ … +N lines (ctrl+o to expand)`) is never captured no matter
+   how stable it is.
+
+2. **Have the agent write its result to a file**, then read the file. This
+   bypasses both async rendering and folding, so it is the most robust when you
+   need the complete answer:
+
+   ```bash
+   prowl send --pane <pane-id> 'summarize … and write it to /tmp/out.md' --no-wait
+   # … wait for idle … then:
+   cat /tmp/out.md
+   ```
+
 ## Quoting
 
 Protect commands from the local shell when they should expand inside the target pane:
@@ -150,13 +221,21 @@ printf '%s\n' 'echo first' 'echo second' | prowl send --pane <pane-id> --no-wait
 
 ## Error Handling
 
+In `--json` mode, command-level errors come back as `{ "ok": false, "error": { "code", "message" } }`. Common codes:
+
 - `APP_NOT_RUNNING`: Prowl is not running, or its CLI service is unavailable. Ask the user before restarting Prowl.
-- `TARGET_NOT_FOUND` / `TARGET_NOT_UNIQUE`: run `prowl list --json` again and resolve an explicit pane UUID.
-- `WAIT_TIMEOUT`: retry with `--no-wait`, or use a pane with shell integration for `--capture`.
-- `UNSUPPORTED_KEY`: inspect `prowl key --help`; use canonical tokens such as `enter`, `esc`, `tab`, `up`, `down`, `ctrl-c`, `cmd-k`, or `f1`.
+- `TARGET_NOT_FOUND` / `TARGET_NOT_UNIQUE`: re-run `prowl list --json` and resolve an explicit pane UUID (the error does **not** enumerate the candidates).
+- `EMPTY_INPUT`: `send` got no text (no argument and no stdin).
+- `INVALID_ARGUMENT`: bad flag value or illegal combo (e.g. `--capture` with `--no-wait`, `--stable-*` without `--wait-stable`, `--last 0`).
+- `PATH_NOT_FOUND` / `PATH_NOT_DIRECTORY` / `PATH_NOT_ALLOWED`: `open` path problems.
+- `UNSUPPORTED_KEY` / `INVALID_REPEAT`: bad key token or out-of-range `--repeat`; see `prowl key --help`. Canonical tokens: `enter`, `esc`, `tab`, `up`, `down`, `ctrl-c`, `cmd-k`, `f1`, …
+- `WAIT_TIMEOUT`: `send` waited but the command never reported completion — retry with `--no-wait`, or use a shell-integrated pane for `--capture`.
+
+> ⚠️ **Not every failure is JSON.** Argument-*parsing* errors (unknown flag, wrong type such as `read --last abc`) are caught by the parser *before* `--json` takes effect: they print a plaintext usage error to **stderr** and exit non-zero. A `| jq …` pipeline will choke on these. Get flag names/types right, and always check the exit code rather than assuming stdout is JSON.
 
 ## Notes
 
-- JSON output is the automation surface; text output is for humans.
+- JSON output is the automation surface; text output is for humans. JSON keys are snake_case (`line_count`, `waited_ms`, `created_tab`, `trailing_enter_sent`, …) — match them exactly in `jq` or you'll silently get `null`.
+- `--no-color` is global (works on every command) and safe in automation.
 - `-t/--target` auto-resolves pane UUID, tab UUID, or worktree id/name/path, but explicit `--pane` is safer for automation.
-- Future Prowl versions may add commands such as `prowl action`, `prowl tab`, or `prowl pane`. Check `prowl --help` before using commands not listed here.
+- The current commands are `list`, `read`, `send`, `key`, `focus`, and `open` (the default). There is **no close/quit command** — you cannot close a tab/pane via the CLI (send `cmd-w` as a key if you must). Run `prowl --help` to confirm the command set before automating.
