@@ -17,11 +17,14 @@ struct AppFeatureSettingsChangedTests {
     settings.githubIntegrationEnabled = false
     settings.mergedWorktreeAction = .archive
     settings.moveNotifiedWorktreeToTop = false
+    settings.showActiveAgentTabTitles = true
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
 
-    await store.send(.settings(.delegate(.settingsChanged(settings))))
+    await store.send(.settings(.delegate(.settingsChanged(settings)))) {
+      $0.repositories.showActiveAgentTabTitles = true
+    }
     await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled) {
       $0.repositories.githubIntegrationAvailability = .disabled
     }
@@ -97,6 +100,15 @@ struct AppFeatureSettingsChangedTests {
     await store.receive(\.repositories.activeAgents.agentEntryChanged) {
       $0.repositories.activeAgents.entries = [entry]
     }
+  }
+
+  @Test func appStateInitializesActiveAgentTabTitleDisplayFromSettings() {
+    var settings = SettingsFeature.State()
+    settings.showActiveAgentTabTitles = true
+
+    let state = AppFeature.State(settings: settings)
+
+    #expect(state.repositories.showActiveAgentTabTitles == true)
   }
 
   @Test(.dependencies) func settingsChangedRecomputesResolvedKeybindings() async {
