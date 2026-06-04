@@ -61,6 +61,14 @@ final class CLISocketServer {
       releaseSocketLock()
       throw CLIServiceError.socketCreationFailed
     }
+    do {
+      try Self.setCloseOnExec(serverFD)
+    } catch {
+      close(serverFD)
+      serverFD = -1
+      releaseSocketLock()
+      throw CLIServiceError.socketCreationFailed
+    }
 
     // Bind
     let bindResult = withUnsafePointer(to: &addr) { ptr in
@@ -115,6 +123,12 @@ final class CLISocketServer {
     guard lockFD < 0 else { return }
     lockFD = open(lockPath, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
     guard lockFD >= 0 else {
+      throw CLIServiceError.lockFailed
+    }
+    do {
+      try Self.setCloseOnExec(lockFD)
+    } catch {
+      releaseSocketLock()
       throw CLIServiceError.lockFailed
     }
     guard flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
@@ -214,6 +228,16 @@ final class CLISocketServer {
     }
   }
 
+  private static func setCloseOnExec(_ fileDescriptor: Int32) throws {
+    let flags = fcntl(fileDescriptor, F_GETFD)
+    guard flags >= 0 else {
+      throw CLIServiceError.closeOnExecFailed
+    }
+    guard fcntl(fileDescriptor, F_SETFD, flags | FD_CLOEXEC) == 0 else {
+      throw CLIServiceError.closeOnExecFailed
+    }
+  }
+
   private static func canConnect(to socketPath: String) -> Bool {
     let socketFD = socket(AF_UNIX, SOCK_STREAM, 0)
     guard socketFD >= 0 else { return false }
@@ -246,6 +270,12 @@ final class CLISocketServer {
     }
     return addr
   }
+
+  #if DEBUG
+    var debugFileDescriptors: (server: Int32, lock: Int32) {
+      (serverFD, lockFD)
+    }
+  #endif
 }
 
 // MARK: - Errors
@@ -255,6 +285,7 @@ enum CLIServiceError: Error, Equatable {
   case socketPathTooLong
   case socketAlreadyOwned
   case lockFailed
+  case closeOnExecFailed
   case bindFailed
   case listenFailed
   case readFailed

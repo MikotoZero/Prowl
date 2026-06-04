@@ -55,6 +55,17 @@ struct CLISocketServerTests {
     #expect(canConnect(to: socketPath))
   }
 
+  @Test func ownedDescriptorsAreClosedOnExec() throws {
+    let socketPath = temporarySocketPath(suffix: "cloexec")
+    let server = CLISocketServer(router: CLICommandRouter(), socketPath: socketPath)
+    try server.start()
+    defer { server.stop() }
+
+    let descriptors = server.debugFileDescriptors
+    #expect(isCloseOnExec(descriptors.server))
+    #expect(isCloseOnExec(descriptors.lock))
+  }
+
   private func temporarySocketPath(suffix: String) -> String {
     URL(fileURLWithPath: "/tmp", isDirectory: true)
       .appending(
@@ -97,6 +108,11 @@ struct CLISocketServerTests {
     guard result == 0 else {
       throw CLIServiceError.bindFailed
     }
+  }
+
+  private func isCloseOnExec(_ fileDescriptor: Int32) -> Bool {
+    let flags = fcntl(fileDescriptor, F_GETFD)
+    return flags >= 0 && (flags & FD_CLOEXEC) == FD_CLOEXEC
   }
 
   private func withSocketAddress<Result>(
