@@ -66,6 +66,8 @@ prowl read                         # read screen content on demand
 prowl key <keystroke>              # send keystrokes programmatically
 ```
 
+Teach your agent when and how to drive Prowl by installing the bundled `prowl-cli` skill with [`skills`](https://github.com/vercel-labs/skills): `npx skills add onevcat/Prowl --skill prowl-cli`.
+
 ### And the stuff you'd expect, done right
 
 - **Full Native** — powered by libghostty. No Electron, no web views. CJK-safe out of the box.
