@@ -171,7 +171,7 @@ Avoid outer double quotes around payloads containing `$PWD`, `$VAR`, backticks, 
 - `open /path` creates a new tab/pane. It is not a refocus command.
 - Focused pane is not stable; `open` and `focus` change it.
 - `read --wait-stable` sees rendered screen only. It cannot recover content folded by a TUI.
-- `read` sets `truncated: true` only when the returned text may be incomplete (the full scrollback could not be read and the viewport had fewer lines than `--last` asked for). Getting fewer lines than `--last` simply because the pane has less history is `truncated: false` — you already have everything; do not retry expecting more.
+- `read` returning fewer lines than `--last` requested is normally `truncated: false` — the pane simply has less history and you already have it all, so do not retry for more. `truncated: true` flags a possibly-incomplete result (the full scrollback could not be read).
 - `send --capture` captures a screen diff; multiline input may include command echo.
 - `prowl list --json | jq ...` snippets should pass shell values with `--arg`.
 - In zsh, do not name variables `status`; it is readonly.
