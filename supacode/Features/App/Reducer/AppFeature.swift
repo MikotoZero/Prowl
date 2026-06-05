@@ -820,7 +820,7 @@ struct AppFeature {
         return .none
 
       case .newTerminal:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
         analyticsClient.capture("terminal_tab_created", nil)
@@ -1268,7 +1268,7 @@ struct AppFeature {
         return .send(.runCustomCommand(index))
 
       case .commandPalette(.delegate(.ghosttyCommand(let action))):
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
         return .run { _ in

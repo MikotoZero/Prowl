@@ -384,6 +384,37 @@ struct CommandPaletteFeatureTests {
     #expect(ghosttyItem?.subtitle == "Focus the split to the right.")
   }
 
+  @Test func commandPaletteItems_includeGhosttyCommandsForCanvasActionTarget() {
+    let rootPath = "/tmp/repo-canvas-new-tab"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "wt-1", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id,
+      ghosttyCommands: [
+        GhosttyCommand(
+          title: "New Tab",
+          description: "Open a new tab.",
+          action: "new_tab",
+          actionKey: "new_tab"
+        )
+      ]
+    )
+
+    let ghosttyItem = items.first {
+      if case .ghosttyCommand(let action) = $0.kind {
+        return action == "new_tab"
+      }
+      return false
+    }
+
+    #expect(ghosttyItem?.title == "New Tab")
+    #expect(ghosttyItem?.subtitle == "Open a new tab.")
+  }
+
   @Test func commandPaletteItems_filtersUnsupportedGhosttyCommands() {
     let rootPath = "/tmp/repo"
     let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
