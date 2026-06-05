@@ -449,12 +449,14 @@ struct SidebarListView: View {
       }
       sidebarSelections = []
       if store.state.isShowingCanvas {
-        store.send(.selectRepository(repository.id))
+        store.send(.focusCanvasRepository(repository.id))
       }
     } else {
       sidebarSelections = [.repository(repository.id)]
-      store.send(.selectRepository(repository.id))
-      if !store.state.isShowingCanvas {
+      if store.state.isShowingCanvas {
+        store.send(.focusCanvasRepository(repository.id))
+      } else {
+        store.send(.selectRepository(repository.id))
         focusTerminalAfterSidebarSelection(worktreeID: store.state.selectedTerminalWorktree?.id)
       }
     }

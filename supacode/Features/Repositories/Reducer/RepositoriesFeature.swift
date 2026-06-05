@@ -347,6 +347,8 @@ struct RepositoriesFeature {
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)
+    case focusCanvasRepository(Repository.ID)
+    case focusCanvasWorktree(Worktree.ID)
     case selectNextWorktree
     case selectPreviousWorktree
     case consumeCanvasFocusRequest(Int)
@@ -969,13 +971,6 @@ struct RepositoriesFeature {
           let selectRepoToken = repositoriesLogger.beginInterval("reducer.selectRepository")
           defer { repositoriesLogger.endInterval(selectRepoToken) }
           guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
-          if state.isShowingCanvas {
-            guard let worktree = state.canvasNavigationWorktree(forRepositoryID: repositoryID) else { return .none }
-            requestCanvasFocus(.worktree(worktree.id), openedWorktreeID: worktree.id, state: &state)
-            return .run { _ in
-              await terminalClient.send(.ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false))
-            }
-          }
           recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
           state.selection = .repository(repositoryID)
           state.sidebarSelectedWorktreeIDs = []
@@ -988,13 +983,6 @@ struct RepositoriesFeature {
         case .selectWorktree(let worktreeID, let focusTerminal, let recordHistory):
           let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")
           defer { repositoriesLogger.endInterval(selectWtToken) }
-          if state.isShowingCanvas {
-            guard let worktree = state.worktree(for: worktreeID) else { return .none }
-            requestCanvasFocus(.worktree(worktree.id), openedWorktreeID: worktree.id, state: &state)
-            return .run { _ in
-              await terminalClient.send(.ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false))
-            }
-          }
           setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: recordHistory)
           if focusTerminal, let worktreeID {
             state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
@@ -1004,6 +992,28 @@ struct RepositoriesFeature {
           }
           let selectedWorktree = state.worktree(for: worktreeID)
           return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
+
+        case .focusCanvasRepository(let repositoryID):
+          guard state.isShowingCanvas,
+            let worktree = state.canvasNavigationWorktree(forRepositoryID: repositoryID)
+          else {
+            return .none
+          }
+          requestCanvasFocus(.worktree(worktree.id), openedWorktreeID: worktree.id, state: &state)
+          return .run { _ in
+            await terminalClient.send(.ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false))
+          }
+
+        case .focusCanvasWorktree(let worktreeID):
+          guard state.isShowingCanvas,
+            let worktree = state.worktree(for: worktreeID)
+          else {
+            return .none
+          }
+          requestCanvasFocus(.worktree(worktree.id), openedWorktreeID: worktree.id, state: &state)
+          return .run { _ in
+            await terminalClient.send(.ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false))
+          }
 
         case .selectNextWorktree:
           // In Shelf, the vertical arrow pair maps to tab navigation

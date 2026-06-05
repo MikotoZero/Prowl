@@ -288,8 +288,10 @@ struct WorktreeRowsView: View {
       return
     }
 
-    store.send(.selectWorktree(worktreeID, focusTerminal: true))
-    if !store.state.isShowingCanvas {
+    if store.state.isShowingCanvas {
+      store.send(.focusCanvasWorktree(worktreeID))
+    } else {
+      store.send(.selectWorktree(worktreeID, focusTerminal: true))
       focusTerminalAfterSelection(worktreeID: worktreeID)
     }
   }
