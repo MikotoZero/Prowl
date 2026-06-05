@@ -159,6 +159,42 @@ struct AppFeatureCommandPaletteTests {
     #expect(sent.value == [.focusSelectedTab(worktree)])
   }
 
+  @Test(.dependencies) func ghosttyCommandDelegateInCanvasUsesCanvasFocusedWorktree() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-canvas-ghostty/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-canvas-ghostty"
+    )
+    let repository = makeRepository(id: "/tmp/repo-canvas-ghostty", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.ghosttyCommand("new_tab"))))
+    await store.finish()
+
+    #expect(
+      sent.value == [
+        .performBindingAction(worktree, action: "new_tab"),
+        .focusSelectedTab(worktree),
+      ]
+    )
+  }
+
   @Test(.dependencies) func passiveCommandPaletteCommandRestoresSelectedTerminalFocus() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-passive/wt-1",

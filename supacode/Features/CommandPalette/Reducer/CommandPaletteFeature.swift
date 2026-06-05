@@ -266,6 +266,8 @@ struct CommandPaletteFeature {
         )
       )
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
+    } else if worktreeActionTargetID != nil {
+      items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
     }
     if let repository = activeRepository(in: repositories) {
       items.append(
