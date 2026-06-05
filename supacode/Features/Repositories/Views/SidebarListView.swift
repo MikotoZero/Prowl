@@ -448,12 +448,9 @@ struct SidebarListView: View {
         }
       }
       sidebarSelections = []
-      if store.state.isShowingCanvas {
-        store.send(.focusCanvasRepository(repository.id))
-      }
     } else {
       sidebarSelections = [.repository(repository.id)]
-      if store.state.isShowingCanvas {
+      if store.state.isShowingCanvas, Self.repositoryHeaderOpensCanvasTarget(repository) {
         store.send(.focusCanvasRepository(repository.id))
       } else {
         store.send(.selectRepository(repository.id))
@@ -502,6 +499,10 @@ struct SidebarListView: View {
       selectedWorktreeIDs.insert(selectedWorktreeID)
     }
     return selectedWorktreeIDs
+  }
+
+  static func repositoryHeaderOpensCanvasTarget(_ repository: Repository) -> Bool {
+    repository.capabilities.supportsRunnableFolderActions && !repository.capabilities.supportsWorktrees
   }
 
   static func activeAgentWorktreeMetadata(
