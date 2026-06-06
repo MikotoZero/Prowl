@@ -23,6 +23,7 @@ struct CanvasCardView: View {
   let isSelected: Bool
   let hasUnseenNotification: Bool
   let cardSize: CGSize
+  let animatesSizeChanges: Bool
   let canvasScale: CGFloat
   let showsSelectionShield: Bool
   let onTap: () -> Void
@@ -228,16 +229,16 @@ struct CanvasCardView: View {
   }
 
   private var terminalContent: some View {
-    TerminalSplitTreeView(
+    AnimatedTerminalSplitTreeView(
       tree: tree,
-      pinnedSize: cardSize,
+      size: cardSize,
       activeSurfaceID: activeSurfaceID,
       unfocusedSplitOverlay: unfocusedSplitOverlay,
       splitDivider: splitDivider,
       hasNotification: { _ in false },
       action: onSplitOperation
     )
-    .frame(width: cardSize.width, height: cardSize.height)
+    .animation(animatesSizeChanges ? .easeInOut(duration: 0.2) : nil, value: cardSize)
     .allowsHitTesting(isFocused && !showsSelectionShield)
   }
 
@@ -367,6 +368,36 @@ struct CanvasCardView: View {
       x: (alignment == .bottomTrailing || alignment == .topTrailing) ? cornerSide / 3 : -cornerSide / 3,
       y: (alignment == .topLeading || alignment == .topTrailing) ? -cornerSide / 3 : cornerSide / 3
     )
+  }
+}
+
+private struct AnimatedTerminalSplitTreeView: View, Animatable {
+  let tree: SplitTree<GhosttySurfaceView>
+  var size: CGSize
+  let activeSurfaceID: UUID?
+  let unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+  var splitDivider: (color: Color?, width: CGFloat?)
+  let hasNotification: (UUID) -> Bool
+  let action: (TerminalSplitTreeView.Operation) -> Void
+
+  var animatableData: AnimatablePair<CGFloat, CGFloat> {
+    get { AnimatablePair(size.width, size.height) }
+    set {
+      size = CGSize(width: newValue.first, height: newValue.second)
+    }
+  }
+
+  var body: some View {
+    TerminalSplitTreeView(
+      tree: tree,
+      pinnedSize: size,
+      activeSurfaceID: activeSurfaceID,
+      unfocusedSplitOverlay: unfocusedSplitOverlay,
+      splitDivider: splitDivider,
+      hasNotification: hasNotification,
+      action: action
+    )
+    .frame(width: size.width, height: size.height)
   }
 }
 
