@@ -34,9 +34,6 @@ struct CanvasView: View {
   /// The tab currently expanded in place (near-fullscreen overlay) on canvas,
   /// or nil when no card is expanded.
   @State private var expandedTabID: TerminalTabID?
-  /// Canvas scale/offset captured when entering expand, restored on collapse.
-  @State private var preExpandScale: CGFloat?
-  @State private var preExpandOffset: CGSize?
 
   private let minCardWidth: CGFloat = 300
   private let minCardHeight: CGFloat = 200
@@ -257,7 +254,12 @@ struct CanvasView: View {
     let cardKey = tab.id.rawValue.uuidString
     let baseLayout = layoutStore.cardLayouts[cardKey] ?? CanvasCardLayout(position: .zero)
     let resized = resizedFrame(for: tab.id, baseLayout: baseLayout)
-    let screenCenter = screenPosition(for: resized.center)
+    // An expanded card transforms on its own — scale 1, centered in the
+    // viewport — independent of the canvas pan/zoom, so the background is frozen.
+    let isCardExpanded = expandedTabID == tab.id
+    let appliedScale = isCardExpanded ? 1 : canvasScale
+    let screenCenter =
+      isCardExpanded ? expandedScreenCenter : screenPosition(for: resized.center)
     let cardTotalHeight = resized.size.height + titleBarHeight
     let unfocusedSplitOverlay = terminalManager.unfocusedSplitOverlay()
     let splitDivider = terminalManager.splitDividerAppearance()
@@ -279,8 +281,8 @@ struct CanvasView: View {
       hasUnseenNotification: state.hasUnseenNotification(for: tab.id),
       cardSize: resized.size,
       animatesSizeChanges: activeResize[tab.id] == nil,
-      isExpanded: expandedTabID == tab.id,
-      canvasScale: canvasScale,
+      isExpanded: isCardExpanded,
+      canvasScale: appliedScale,
       showsSelectionShield: showsSelectionShield(for: tab.id),
       onTap: {
         let cmdHeld = NSEvent.modifierFlags.contains(.command)
@@ -330,7 +332,7 @@ struct CanvasView: View {
         state.closeTab(tab.id)
       }
     )
-    .scaleEffect(canvasScale, anchor: .center)
+    .scaleEffect(appliedScale, anchor: .center)
     .offset(
       x: screenCenter.x - resized.size.width / 2,
       y: screenCenter.y - cardTotalHeight / 2
@@ -431,10 +433,10 @@ struct CanvasView: View {
     for tabID: TerminalTabID,
     baseLayout: CanvasCardLayout
   ) -> (center: CGPoint, size: CGSize) {
-    // An expanded card renders at its near-fullscreen size, centered via the
-    // canvas offset; resize is disabled while expanded.
-    if expandedTabID == tabID, let frame = expandLayout(for: tabID) {
-      return (baseLayout.position, frame.size)
+    // An expanded card renders at its near-fullscreen size, positioned by the
+    // card view independently of the canvas transform; resize is disabled.
+    if let size = expandedSize(for: tabID) {
+      return (baseLayout.position, size)
     }
 
     var centerX = baseLayout.position.x
@@ -782,8 +784,6 @@ struct CanvasView: View {
 
   // MARK: - Expand In Place
 
-  /// Expanded size + centering offset for a card, or nil when the viewport or
-  /// the card's stored layout isn't available yet.
   private var expandMetrics: CanvasExpandGeometry.Metrics {
     CanvasExpandGeometry.Metrics(
       padding: expandPadding,
@@ -793,15 +793,19 @@ struct CanvasView: View {
     )
   }
 
-  private func expandLayout(for tabID: TerminalTabID) -> (size: CGSize, offset: CGSize)? {
-    guard viewportSize.width > 0, viewportSize.height > 0,
-      let layout = layoutStore.cardLayouts[tabID.rawValue.uuidString]
+  /// Content size (excluding title bar) for the card currently expanded, or nil
+  /// when `tabID` isn't expanded or the viewport isn't measured yet.
+  private func expandedSize(for tabID: TerminalTabID) -> CGSize? {
+    guard expandedTabID == tabID, viewportSize.width > 0, viewportSize.height > 0
     else { return nil }
-    return CanvasExpandGeometry.expandedFrame(
-      viewport: viewportSize,
-      cardCenter: layout.position,
-      metrics: expandMetrics
-    )
+    return CanvasExpandGeometry.expandedSize(viewport: viewportSize, metrics: expandMetrics)
+  }
+
+  /// Screen-space center for an expanded card: horizontally centered and within
+  /// the toolbar-adjusted viewport. Independent of canvas pan/zoom, so the card
+  /// covers the whole viewport regardless of the (unchanged) background.
+  private var expandedScreenCenter: CGPoint {
+    CGPoint(x: viewportSize.width / 2, y: (viewportSize.height - bottomToolbarReserve) / 2)
   }
 
   /// Toggle expand/restore for a card — used by the title-bar button and the
@@ -814,53 +818,33 @@ struct CanvasView: View {
     }
   }
 
-  /// Expand a card in place: capture the current canvas transform, raise the
-  /// card to the top, snap scale to 1 (native font size), and grow it to
-  /// near-fullscreen centered in the viewport. Other cards keep running behind
-  /// a dimming scrim.
+  /// Expand a card in place: raise it to the top and let it animate, on its own,
+  /// from its current canvas position/size to scale 1 covering the whole
+  /// viewport (with padding). The canvas transform is left untouched, so every
+  /// other card stays exactly where it was — the expanded card simply floats
+  /// above a dimming scrim.
   private func expandCard(_ tabID: TerminalTabID, states: [WorktreeTerminalState]) {
-    guard let frame = expandLayout(for: tabID) else { return }
-    if expandedTabID == nil {
-      preExpandScale = canvasScale
-      preExpandOffset = canvasOffset
-    }
+    guard viewportSize.width > 0, viewportSize.height > 0,
+      layoutStore.cardLayouts[tabID.rawValue.uuidString] != nil
+    else { return }
     focusSingleCard(tabID, states: states)
     withAnimation(expandAnimation) {
       expandedTabID = tabID
-      canvasScale = 1
-      canvasOffset = frame.offset
-      lastCanvasScale = 1
-      lastCanvasOffset = frame.offset
     }
   }
 
-  /// Restore the expanded card to its prior size and the canvas to its prior
-  /// scale/offset.
+  /// Restore the expanded card back into the (unchanged) canvas.
   private func collapseExpand() {
     guard expandedTabID != nil else { return }
-    let restoreScale = preExpandScale
-    let restoreOffset = preExpandOffset
     withAnimation(expandAnimation) {
       expandedTabID = nil
-      if let restoreScale {
-        canvasScale = restoreScale
-        lastCanvasScale = restoreScale
-      }
-      if let restoreOffset {
-        canvasOffset = restoreOffset
-        lastCanvasOffset = restoreOffset
-      }
     }
-    preExpandScale = nil
-    preExpandOffset = nil
   }
 
-  /// Drop expand state without restoring the transform — used right before a
-  /// relayout (Arrange/Organize) takes over the canvas.
+  /// Drop expand state without animation — used right before a relayout
+  /// (Arrange/Organize) takes over the canvas.
   private func cancelExpandForRelayout() {
     expandedTabID = nil
-    preExpandScale = nil
-    preExpandOffset = nil
   }
 
   private func fulfillPendingFocusRequest(
@@ -1068,8 +1052,6 @@ struct CanvasView: View {
 
   private func deactivateCanvas() {
     expandedTabID = nil
-    preExpandScale = nil
-    preExpandOffset = nil
     let activeStates = terminalManager.activeWorktreeStates
     for state in activeStates {
       state.isCanvasManaged = false
