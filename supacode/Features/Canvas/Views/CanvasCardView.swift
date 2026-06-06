@@ -23,7 +23,6 @@ struct CanvasCardView: View {
   let isSelected: Bool
   let hasUnseenNotification: Bool
   let cardSize: CGSize
-  let animatesSizeChanges: Bool
   /// Whether this card is currently expanded in place (near-fullscreen). When
   /// true the title-bar button restores instead of expands, resize handles and
   /// title-bar dragging are disabled, and the action buttons stay visible.
@@ -247,7 +246,10 @@ struct CanvasCardView: View {
       hasNotification: { _ in false },
       action: onSplitOperation
     )
-    .animation(animatesSizeChanges ? .easeInOut(duration: 0.2) : nil, value: cardSize)
+    // No own size animation: the canvas drives every size change inside a
+    // withAnimation (expand/restore, resize commit, arrange), so the terminal
+    // refit stays in lock-step with the card's offset/scale. Without a wrapping
+    // animation (live resize drag) the size tracks the gesture 1:1.
     .allowsHitTesting(isFocused && !showsSelectionShield)
   }
 
