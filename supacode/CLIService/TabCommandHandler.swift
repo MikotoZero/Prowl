@@ -38,7 +38,7 @@ extension TabResolvedTarget {
 final class TabCommandHandler: CommandHandler {
   typealias ResolveProvider = @MainActor (TargetSelector) -> Result<TabResolvedTarget, TargetResolverError>
   typealias CreateTabProvider = @MainActor (TabResolvedTarget, String?) -> TabResolvedTarget?
-  typealias CloseTabProvider = @MainActor (TabResolvedTarget) -> Bool
+  typealias CloseTabProvider = @MainActor (TabResolvedTarget, Bool) -> Bool
 
   private let resolveProvider: ResolveProvider
   private let createTab: CreateTabProvider
@@ -60,6 +60,13 @@ final class TabCommandHandler: CommandHandler {
       return errorResponse(code: CLIErrorCode.tabFailed, message: "Invalid command.")
     }
 
+    if input.action == .close, input.selector.isNone {
+      return errorResponse(
+        code: CLIErrorCode.invalidArgument,
+        message: "tab close requires an explicit target selector."
+      )
+    }
+
     let target: TabResolvedTarget
     switch resolveProvider(input.selector) {
     case .success(let resolved):
@@ -72,7 +79,7 @@ final class TabCommandHandler: CommandHandler {
     case .create:
       return handleCreate(input: input, target: target)
     case .close:
-      return handleClose(target: target)
+      return handleClose(input: input, target: target)
     }
   }
 
@@ -91,8 +98,8 @@ final class TabCommandHandler: CommandHandler {
     return success(action: .create, target: createdTarget)
   }
 
-  private func handleClose(target: TabResolvedTarget) -> CommandResponse {
-    guard closeTab(target) else {
+  private func handleClose(input: TabInput, target: TabResolvedTarget) -> CommandResponse {
+    guard closeTab(target, input.force) else {
       return errorResponse(code: CLIErrorCode.tabFailed, message: "Failed to close tab.")
     }
     return success(action: .close, target: target)

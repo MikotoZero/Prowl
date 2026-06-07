@@ -763,20 +763,31 @@ extension WorktreeTerminalState {
     }
   }
 
-  func handleCloseRequest(for view: GhosttySurfaceView, processAlive: Bool) {
-    guard surfaces[view.id] != nil else { return }
-    if processAlive {
-      guard confirmCloseIfNeeded(surfaceIDs: [view.id], mode: .prompt(.pane)) else { return }
-    }
+  @discardableResult
+  func closeSurface(id surfaceID: UUID, confirmation: TerminalCloseConfirmationMode = .prompt(.pane)) -> Bool {
+    guard let view = surfaces[surfaceID] else { return false }
+    return closeSurface(view, confirmation: confirmation)
+  }
+
+  @discardableResult
+  func handleCloseRequest(for view: GhosttySurfaceView, processAlive: Bool) -> Bool {
+    let confirmation: TerminalCloseConfirmationMode = processAlive ? .prompt(.pane) : .skip
+    return closeSurface(view, confirmation: confirmation)
+  }
+
+  @discardableResult
+  private func closeSurface(_ view: GhosttySurfaceView, confirmation: TerminalCloseConfirmationMode) -> Bool {
+    guard surfaces[view.id] != nil else { return false }
+    guard confirmCloseIfNeeded(surfaceIDs: [view.id], mode: confirmation) else { return false }
     guard let tabId = tabId(containing: view.id), let tree = trees[tabId] else {
       view.closeSurface()
       forgetSurface(view.id)
-      return
+      return true
     }
     guard let node = tree.find(id: view.id) else {
       view.closeSurface()
       forgetSurface(view.id)
-      return
+      return true
     }
     let nextSurface =
       focusedSurfaceIdByTab[tabId] == view.id
@@ -798,7 +809,7 @@ extension WorktreeTerminalState {
       // Shelf's "retire the book when its last tab closes" logic
       // never saw this very common path.
       onTabClosed?()
-      return
+      return true
     }
     updateTree(newTree, for: tabId)
     updateRunningState(for: tabId)
@@ -809,6 +820,7 @@ extension WorktreeTerminalState {
         focusedSurfaceIdByTab.removeValue(forKey: tabId)
       }
     }
+    return true
   }
 
   func handleGotoTabRequest(_ target: ghostty_action_goto_tab_e) -> Bool {

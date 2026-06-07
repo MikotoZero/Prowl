@@ -193,7 +193,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let (requestData, result) = try runWithMockServer(
       socketPath: socketPath,
       response: response,
-      args: ["tab", "close", "--tab", "tab-123", "--json"]
+      args: ["tab", "close", "--tab", "tab-123", "--force", "--json"]
     )
 
     XCTAssertEqual(result.exitCode, 0)
@@ -202,9 +202,21 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       XCTAssertEqual(input.action, .close)
       XCTAssertEqual(input.selector, .tab("tab-123"))
       XCTAssertNil(input.path)
+      XCTAssertTrue(input.force)
     } else {
       XCTFail("Expected tab command envelope")
     }
+  }
+
+  func testTabCloseRejectsMissingTargetBeforeTransport() throws {
+    let result = try runProwl(args: ["tab", "close", "--json"])
+
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "tab")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
   }
 
   func testPaneCloseCommandRoundTripsOverSocket() throws {
@@ -219,7 +231,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let (requestData, result) = try runWithMockServer(
       socketPath: socketPath,
       response: response,
-      args: ["pane", "close", "--pane", "pane-123", "--json"]
+      args: ["pane", "close", "--pane", "pane-123", "--force", "--json"]
     )
 
     XCTAssertEqual(result.exitCode, 0)
@@ -227,9 +239,21 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     if case .pane(let input) = envelope.command {
       XCTAssertEqual(input.action, .close)
       XCTAssertEqual(input.selector, .pane("pane-123"))
+      XCTAssertTrue(input.force)
     } else {
       XCTFail("Expected pane command envelope")
     }
+  }
+
+  func testPaneCloseRejectsMissingTargetBeforeTransport() throws {
+    let result = try runProwl(args: ["pane", "close", "--json"])
+
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "pane")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
   }
 
   func testFocusRejectsMultipleSelectorsBeforeTransport() throws {

@@ -78,6 +78,12 @@ prowl pane close --pane "$pane" --json
 prowl tab close --tab "$tab" --json
 ```
 
+`tab close` and `pane close` require an explicit `--tab`, `--pane`, `--worktree`, or `--target`; they intentionally do not default to the currently focused pane. If the target has protected agent work or a long-running command, Prowl may ask for GUI confirmation. Use `--force` only after you have positively identified the target:
+
+```bash
+prowl pane close --pane "$pane" --force --json
+```
+
 ## Reading Agent Output
 
 `task.status` is useful for coordination but is not enough to prove the screen finished rendering. `idle` can arrive before a TUI has painted its final response.

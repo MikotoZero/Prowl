@@ -139,6 +139,47 @@ struct CLICommandEnvelopeTests {
       #expect(input.action == .create)
       #expect(input.selector == .worktree("wt-main"))
       #expect(input.path == "/Projects/App")
+      #expect(input.force == false)
+    } else {
+      Issue.record("Expected .tab command")
+    }
+  }
+
+  @Test func envelopeTabCloseForceRoundTrips() throws {
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .tab(TabInput(action: .close, selector: .tab("tab-1"), force: true))
+    )
+    let data = try JSONEncoder().encode(envelope)
+    let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
+    if case .tab(let input) = decoded.command {
+      #expect(input.action == .close)
+      #expect(input.selector == .tab("tab-1"))
+      #expect(input.force == true)
+    } else {
+      Issue.record("Expected .tab command")
+    }
+  }
+
+  @Test func envelopeTabInputDecodesMissingForceAsFalse() throws {
+    let json = """
+      {
+        "output": "json",
+        "command": {
+          "tab": {
+            "_0": {
+              "action": "close",
+              "selector": { "tab": { "_0": "tab-1" } }
+            }
+          }
+        }
+      }
+      """
+    let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: Data(json.utf8))
+    if case .tab(let input) = decoded.command {
+      #expect(input.action == .close)
+      #expect(input.selector == .tab("tab-1"))
+      #expect(input.force == false)
     } else {
       Issue.record("Expected .tab command")
     }
@@ -147,13 +188,38 @@ struct CLICommandEnvelopeTests {
   @Test func envelopePaneCloseRoundTrips() throws {
     let envelope = CommandEnvelope(
       output: .text,
-      command: .pane(PaneInput(action: .close, selector: .pane("pane-1")))
+      command: .pane(PaneInput(action: .close, selector: .pane("pane-1"), force: true))
     )
     let data = try JSONEncoder().encode(envelope)
     let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
     if case .pane(let input) = decoded.command {
       #expect(input.action == .close)
       #expect(input.selector == .pane("pane-1"))
+      #expect(input.force == true)
+    } else {
+      Issue.record("Expected .pane command")
+    }
+  }
+
+  @Test func envelopePaneInputDecodesMissingForceAsFalse() throws {
+    let json = """
+      {
+        "output": "json",
+        "command": {
+          "pane": {
+            "_0": {
+              "action": "close",
+              "selector": { "pane": { "_0": "pane-1" } }
+            }
+          }
+        }
+      }
+      """
+    let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: Data(json.utf8))
+    if case .pane(let input) = decoded.command {
+      #expect(input.action == .close)
+      #expect(input.selector == .pane("pane-1"))
+      #expect(input.force == false)
     } else {
       Issue.record("Expected .pane command")
     }

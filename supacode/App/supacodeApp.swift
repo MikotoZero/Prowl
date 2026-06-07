@@ -497,13 +497,16 @@ struct SupacodeApp: App {
           return nil
         }
       },
-      closeTab: { target in
+      closeTab: { target, force in
         guard let tabUUID = UUID(uuidString: target.tabID),
           let state = terminalManager.stateIfExists(for: target.worktreeID)
         else {
           return false
         }
-        return state.closeTab(TerminalTabID(rawValue: tabUUID))
+        return state.closeTab(
+          TerminalTabID(rawValue: tabUUID),
+          confirmation: force ? .skip : .prompt(.tab)
+        )
       }
     )
     let paneHandler = PaneCommandHandler(
@@ -516,14 +519,16 @@ struct SupacodeApp: App {
         }
         return resolver.resolve(selector).map { TabResolvedTarget(from: $0) }
       },
-      closePane: { target in
+      closePane: { target, force in
         guard let paneID = UUID(uuidString: target.paneID),
           let state = terminalManager.stateIfExists(for: target.worktreeID)
         else {
           return false
         }
-        guard state.focusSurface(id: paneID) else { return false }
-        return state.closeFocusedSurface()
+        return state.closeSurface(
+          id: paneID,
+          confirmation: force ? .skip : .prompt(.pane)
+        )
       }
     )
     return CLICommandRouter(

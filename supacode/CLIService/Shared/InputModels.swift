@@ -143,11 +143,28 @@ public struct TabInput: Codable, Sendable {
   public let action: TabAction
   public let selector: TargetSelector
   public let path: String?
+  public let force: Bool
 
-  public init(action: TabAction, selector: TargetSelector = .none, path: String? = nil) {
+  enum CodingKeys: String, CodingKey {
+    case action
+    case selector
+    case path
+    case force
+  }
+
+  public init(action: TabAction, selector: TargetSelector = .none, path: String? = nil, force: Bool = false) {
     self.action = action
     self.selector = selector
     self.path = path
+    self.force = force
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.action = try container.decode(TabAction.self, forKey: .action)
+    self.selector = try container.decode(TargetSelector.self, forKey: .selector)
+    self.path = try container.decodeIfPresent(String.self, forKey: .path)
+    self.force = try container.decodeIfPresent(Bool.self, forKey: .force) ?? false
   }
 }
 
@@ -158,9 +175,24 @@ public enum PaneAction: String, Codable, Sendable {
 public struct PaneInput: Codable, Sendable {
   public let action: PaneAction
   public let selector: TargetSelector
+  public let force: Bool
 
-  public init(action: PaneAction, selector: TargetSelector = .none) {
+  enum CodingKeys: String, CodingKey {
+    case action
+    case selector
+    case force
+  }
+
+  public init(action: PaneAction, selector: TargetSelector = .none, force: Bool = false) {
     self.action = action
     self.selector = selector
+    self.force = force
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.action = try container.decode(PaneAction.self, forKey: .action)
+    self.selector = try container.decode(TargetSelector.self, forKey: .selector)
+    self.force = try container.decodeIfPresent(Bool.self, forKey: .force) ?? false
   }
 }

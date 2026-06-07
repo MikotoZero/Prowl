@@ -135,6 +135,20 @@ struct WorktreeTerminalManagerTests {
     #expect(state.surfaceView(for: tabId) == nil)
   }
 
+  @Test func closeSurfaceReturnsActualRemovalResult() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+
+    #expect(state.closeSurface(id: surfaceId, confirmation: .skip) == true)
+    #expect(state.surfaceView(for: surfaceId) == nil)
+    #expect(state.tabManager.tabs.isEmpty)
+    #expect(state.closeSurface(id: surfaceId, confirmation: .skip) == false)
+  }
+
   @Test func notificationIndicatorUsesCurrentCountOnStreamStart() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()

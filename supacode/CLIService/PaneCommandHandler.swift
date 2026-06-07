@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 final class PaneCommandHandler: CommandHandler {
   typealias ResolveProvider = @MainActor (TargetSelector) -> Result<TabResolvedTarget, TargetResolverError>
-  typealias ClosePaneProvider = @MainActor (TabResolvedTarget) -> Bool
+  typealias ClosePaneProvider = @MainActor (TabResolvedTarget, Bool) -> Bool
 
   private let resolveProvider: ResolveProvider
   private let closePane: ClosePaneProvider
@@ -24,6 +24,13 @@ final class PaneCommandHandler: CommandHandler {
       return errorResponse(code: CLIErrorCode.paneFailed, message: "Invalid command.")
     }
 
+    if input.action == .close, input.selector.isNone {
+      return errorResponse(
+        code: CLIErrorCode.invalidArgument,
+        message: "pane close requires an explicit target selector."
+      )
+    }
+
     let target: TabResolvedTarget
     switch resolveProvider(input.selector) {
     case .success(let resolved):
@@ -34,7 +41,7 @@ final class PaneCommandHandler: CommandHandler {
 
     switch input.action {
     case .close:
-      guard closePane(target) else {
+      guard closePane(target, input.force) else {
         return errorResponse(code: CLIErrorCode.paneFailed, message: "Failed to close pane.")
       }
       return success(action: .close, target: target)

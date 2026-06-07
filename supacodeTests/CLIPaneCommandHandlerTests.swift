@@ -8,14 +8,16 @@ struct CLIPaneCommandHandlerTests {
   @Test func closeResolvesTargetAndClosesPane() async throws {
     let target = makeTarget(tabID: "tab-1", paneID: "pane-to-close")
     var closedTarget: TabResolvedTarget?
+    var closeForce: Bool?
 
     let handler = PaneCommandHandler(
       resolveProvider: { selector in
         #expect(selector == .pane("pane-to-close"))
         return .success(target)
       },
-      closePane: { target in
+      closePane: { target, force in
         closedTarget = target
+        closeForce = force
         return true
       }
     )
@@ -23,12 +25,13 @@ struct CLIPaneCommandHandlerTests {
     let response = await handler.handle(
       envelope: CommandEnvelope(
         output: .json,
-        command: .pane(PaneInput(action: .close, selector: .pane("pane-to-close")))
+        command: .pane(PaneInput(action: .close, selector: .pane("pane-to-close"), force: true))
       )
     )
 
     #expect(response.ok == true)
     #expect(closedTarget == target)
+    #expect(closeForce == true)
     let data = try #require(response.data)
     let payload = try data.decode(as: PaneCommandPayload.self)
     #expect(payload.action == .close)
@@ -38,7 +41,32 @@ struct CLIPaneCommandHandlerTests {
   @Test func closeReturnsFailureWhenCloseActionFails() async {
     let handler = PaneCommandHandler(
       resolveProvider: { _ in .success(makeTarget()) },
-      closePane: { _ in false }
+      closePane: { _, _ in false }
+    )
+
+    let response = await handler.handle(
+      envelope: CommandEnvelope(
+        output: .json,
+        command: .pane(PaneInput(action: .close, selector: .pane("pane-1")))
+      )
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.paneFailed)
+  }
+
+  @Test func closeRejectsMissingExplicitTarget() async {
+    var didResolve = false
+    var didClose = false
+    let handler = PaneCommandHandler(
+      resolveProvider: { _ in
+        didResolve = true
+        return .success(makeTarget())
+      },
+      closePane: { _, _ in
+        didClose = true
+        return true
+      }
     )
 
     let response = await handler.handle(
@@ -49,7 +77,9 @@ struct CLIPaneCommandHandlerTests {
     )
 
     #expect(response.ok == false)
-    #expect(response.error?.code == CLIErrorCode.paneFailed)
+    #expect(response.error?.code == CLIErrorCode.invalidArgument)
+    #expect(didResolve == false)
+    #expect(didClose == false)
   }
 
   private func makeTarget(

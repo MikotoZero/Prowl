@@ -543,7 +543,7 @@ final class WorktreeTerminalState {
   }
 
   @discardableResult
-  private func closeTab(_ tabId: TerminalTabID, confirmation: TerminalCloseConfirmationMode) -> Bool {
+  func closeTab(_ tabId: TerminalTabID, confirmation: TerminalCloseConfirmationMode) -> Bool {
     guard confirmCloseIfNeeded(tabIds: [tabId], mode: confirmation) else { return false }
     let wasRunScriptTab = tabId == runScriptTabId
     removeTree(for: tabId)

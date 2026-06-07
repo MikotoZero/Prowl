@@ -22,7 +22,7 @@ struct CLITabCommandHandlerTests {
         createPath = path
         return created
       },
-      closeTab: { _ in true }
+      closeTab: { _, _ in true }
     )
 
     let response = await handler.handle(
@@ -53,7 +53,7 @@ struct CLITabCommandHandlerTests {
         didCreate = true
         return nil
       },
-      closeTab: { _ in true }
+      closeTab: { _, _ in true }
     )
 
     let response = await handler.handle(
@@ -76,7 +76,7 @@ struct CLITabCommandHandlerTests {
         createPath = path
         return makeTarget(tabID: "created-tab", paneID: "created-pane")
       },
-      closeTab: { _ in true }
+      closeTab: { _, _ in true }
     )
 
     let response = await handler.handle(
@@ -93,6 +93,7 @@ struct CLITabCommandHandlerTests {
   @Test func closeResolvesTargetAndClosesTab() async throws {
     let target = makeTarget(tabID: "tab-to-close", paneID: "pane-in-tab")
     var closedTarget: TabResolvedTarget?
+    var closeForce: Bool?
 
     let handler = TabCommandHandler(
       resolveProvider: { selector in
@@ -100,8 +101,9 @@ struct CLITabCommandHandlerTests {
         return .success(target)
       },
       createTab: { _, _ in nil },
-      closeTab: { target in
+      closeTab: { target, force in
         closedTarget = target
+        closeForce = force
         return true
       }
     )
@@ -109,16 +111,45 @@ struct CLITabCommandHandlerTests {
     let response = await handler.handle(
       envelope: CommandEnvelope(
         output: .json,
-        command: .tab(TabInput(action: .close, selector: .tab("tab-to-close")))
+        command: .tab(TabInput(action: .close, selector: .tab("tab-to-close"), force: true))
       )
     )
 
     #expect(response.ok == true)
     #expect(closedTarget == target)
+    #expect(closeForce == true)
     let data = try #require(response.data)
     let payload = try data.decode(as: TabCommandPayload.self)
     #expect(payload.action == .close)
     #expect(payload.target.tab.id == "tab-to-close")
+  }
+
+  @Test func closeRejectsMissingExplicitTarget() async throws {
+    var didResolve = false
+    var didClose = false
+    let handler = TabCommandHandler(
+      resolveProvider: { _ in
+        didResolve = true
+        return .success(makeTarget())
+      },
+      createTab: { _, _ in nil },
+      closeTab: { _, _ in
+        didClose = true
+        return true
+      }
+    )
+
+    let response = await handler.handle(
+      envelope: CommandEnvelope(
+        output: .json,
+        command: .tab(TabInput(action: .close, selector: .none))
+      )
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.invalidArgument)
+    #expect(didResolve == false)
+    #expect(didClose == false)
   }
 
   private func makeTarget(
