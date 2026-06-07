@@ -33,10 +33,7 @@ final class CLISocketServer {
   func start() throws {
     // Ensure parent directory exists (e.g. ~/Library/Application Support/com.onevcat.prowl)
     let parentDir = (socketPath as NSString).deletingLastPathComponent
-    try? FileManager.default.createDirectory(
-      atPath: parentDir,
-      withIntermediateDirectories: true
-    )
+    try ensureSocketDirectory(at: parentDir)
 
     var addr = try Self.socketAddress(for: socketPath)
 
@@ -83,6 +80,13 @@ final class CLISocketServer {
       releaseSocketLock()
       throw CLIServiceError.bindFailed
     }
+    guard chmod(socketPath, S_IRUSR | S_IWUSR) == 0 else {
+      close(serverFD)
+      serverFD = -1
+      unlink(socketPath)
+      releaseSocketLock()
+      throw CLIServiceError.permissionFailed
+    }
 
     // Listen
     guard listen(serverFD, 5) == 0 else {
@@ -125,6 +129,10 @@ final class CLISocketServer {
     guard lockFD >= 0 else {
       throw CLIServiceError.lockFailed
     }
+    guard fchmod(lockFD, S_IRUSR | S_IWUSR) == 0 else {
+      releaseSocketLock()
+      throw CLIServiceError.lockFailed
+    }
     do {
       try Self.setCloseOnExec(lockFD)
     } catch {
@@ -142,6 +150,23 @@ final class CLISocketServer {
     flock(lockFD, LOCK_UN)
     close(lockFD)
     lockFD = -1
+  }
+
+  private func ensureSocketDirectory(at parentDir: String) throws {
+    let fileManager = FileManager.default
+    let existed = fileManager.fileExists(atPath: parentDir)
+    try fileManager.createDirectory(
+      atPath: parentDir,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+
+    // Avoid chmod'ing arbitrary existing custom parents such as /tmp or $HOME
+    // when PROWL_CLI_SOCKET is overridden.
+    guard !existed || parentDir == Self.defaultSocketDirectory else { return }
+    guard chmod(parentDir, S_IRWXU) == 0 else {
+      throw CLIServiceError.permissionFailed
+    }
   }
 
   // MARK: - Accept loop (runs on acceptQueue, NOT in Swift concurrency)
@@ -167,6 +192,8 @@ final class CLISocketServer {
     defer { Darwin.close(clientFD) }
 
     do {
+      guard Self.clientHasCurrentUser(clientFD) else { return }
+
       // Read length-prefixed request
       let lengthData = try Self.fdRead(fildes: clientFD, count: 4)
       let length = lengthData.withUnsafeBytes {
@@ -194,6 +221,23 @@ final class CLISocketServer {
     } catch {
       // Connection-level errors are silently dropped
     }
+  }
+
+  static func isAllowedPeerUID(_ peerUID: uid_t, currentUID: uid_t = geteuid()) -> Bool {
+    peerUID == currentUID
+  }
+
+  private static func clientHasCurrentUser(_ clientFD: Int32) -> Bool {
+    #if canImport(Darwin)
+      var peerUID = uid_t()
+      var peerGID = gid_t()
+      guard getpeereid(clientFD, &peerUID, &peerGID) == 0 else {
+        return false
+      }
+      return isAllowedPeerUID(peerUID)
+    #else
+      return true
+    #endif
   }
 
   // MARK: - Low-level I/O using Darwin read/write
@@ -254,6 +298,14 @@ final class CLISocketServer {
     return result == 0
   }
 
+  private static var defaultSocketDirectory: String {
+    FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library", directoryHint: .isDirectory)
+      .appending(path: "Application Support", directoryHint: .isDirectory)
+      .appending(path: "com.onevcat.prowl", directoryHint: .isDirectory)
+      .path(percentEncoded: false)
+  }
+
   private static func socketAddress(for socketPath: String) throws -> sockaddr_un {
     var addr = sockaddr_un()
     addr.sun_family = sa_family_t(AF_UNIX)
@@ -286,6 +338,7 @@ enum CLIServiceError: Error, Equatable {
   case socketAlreadyOwned
   case lockFailed
   case closeOnExecFailed
+  case permissionFailed
   case bindFailed
   case listenFailed
   case readFailed

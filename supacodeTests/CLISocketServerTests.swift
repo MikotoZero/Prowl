@@ -66,16 +66,45 @@ struct CLISocketServerTests {
     #expect(isCloseOnExec(descriptors.lock))
   }
 
+  @Test func socketFilesAreOwnerOnly() throws {
+    let socketPath = temporarySocketPath(suffix: "permissions")
+    let socketDirectory = (socketPath as NSString).deletingLastPathComponent
+    let lockPath = "\(socketPath).lock"
+    let server = CLISocketServer(router: CLICommandRouter(), socketPath: socketPath)
+    try server.start()
+    defer { server.stop() }
+
+    #expect(fileMode(at: socketDirectory) == 0o700)
+    #expect(fileMode(at: socketPath) == 0o600)
+    #expect(fileMode(at: lockPath) == 0o600)
+  }
+
+  @Test func peerUIDMustMatchCurrentUser() {
+    #expect(CLISocketServer.isAllowedPeerUID(501, currentUID: 501))
+    #expect(!CLISocketServer.isAllowedPeerUID(502, currentUID: 501))
+  }
+
   private func temporarySocketPath(suffix: String) -> String {
     URL(fileURLWithPath: "/tmp", isDirectory: true)
+      .appending(path: "prowl-cli-tests-\(UUID().uuidString.prefix(8))", directoryHint: .isDirectory)
       .appending(
         path: "prowl-\(suffix)-\(UUID().uuidString.prefix(8)).sock", directoryHint: .notDirectory
       )
       .path(percentEncoded: false)
   }
 
+  private func fileMode(at path: String) -> mode_t? {
+    var statValue = stat()
+    guard stat(path, &statValue) == 0 else { return nil }
+    return statValue.st_mode & mode_t(0o777)
+  }
+
   private func createStaleSocket(at socketPath: String) throws {
     unlink(socketPath)
+    try FileManager.default.createDirectory(
+      atPath: (socketPath as NSString).deletingLastPathComponent,
+      withIntermediateDirectories: true
+    )
     let socketFD = socket(AF_UNIX, SOCK_STREAM, 0)
     guard socketFD >= 0 else {
       throw CLIServiceError.socketCreationFailed
