@@ -33,7 +33,7 @@ Prefer to learn the agentic way instead of scrolling? Hand this prompt to your c
 Read Prowl's documentation and introduce it to me.
 
 Prowl is a native macOS command center for running many AI coding agents in parallel. Its full manual lives here:
-https://github.com/onevcat/Prowl/blob/main/docs/README.md
+https://raw.githubusercontent.com/onevcat/Prowl/refs/heads/main/docs/README.md
 
 Fetch that index and read it (it links to an overview and per-feature manuals in the same docs/ folder — read the relevant ones). Then:
 1. Briefly tell me what Prowl is and why it's worth my time.
