@@ -41,6 +41,18 @@ cycles books, `⌘⌃↑`/`⌘⌃↓` cycles tabs** — so six agents in flight 
 one-keystroke triage instead of a hunt.
 → [`components/shelf.md`](components/shelf.md)
 
+### 👀 Active Agents panel — your dispatcher for a fleet
+With several agents in flight, the bottleneck isn't running them — it's knowing
+**where to look next**. The Active Agents panel is a live roster of **every agent
+across every worktree, tab, and split**, sorted by urgency: **Blocked** (waiting
+on your approval) first, then **Working**, **Done** (just finished), and **Idle**.
+One click jumps straight to that agent's pane, and **`⌃⌥↑`/`⌃⌥↓`** cycle through
+them from the keyboard — so "which of my ten agents needs me right now?" becomes a
+glance instead of a hunt. For supervising many agents at once, this is the single
+most efficient habit in Prowl.
+→ [`components/active-agents.md`](components/active-agents.md) ·
+[`components/agent-detection.md`](components/agent-detection.md)
+
 ### 🤖 The `prowl` CLI — let your agents drive the terminal
 Prowl ships a `prowl` command-line tool so **both you and your agents** can
 inspect and control the app programmatically. An agent can discover sibling
@@ -61,15 +73,13 @@ command every day. Paired with `claude -p` / `codex exec`, your terminal becomes
 a daily AI-powered assistant on a keystroke.
 → [`components/custom-actions.md`](components/custom-actions.md)
 
-### 🔔 Active Agents panel & Agent Reminders
-A live list of **every running agent across every worktree**, each with a
-status — Working, Blocked (needs you), Done, or Idle — and one-click jump-to-agent.
-The moment an agent finishes, Prowl can fire a macOS notification, badge the
-Dock, and float the worktree to the top, so you can leave the screen and come
-back exactly when you're needed.
-→ [`components/active-agents.md`](components/active-agents.md) ·
-[`components/agent-detection.md`](components/agent-detection.md) ·
-[`components/notifications.md`](components/notifications.md)
+### 🔔 Agent Reminders — come back exactly when you're needed
+Walk away from the screen. The moment an agent finishes — or blocks on a prompt
+waiting for you — Prowl fires a macOS notification, badges the Dock, and floats
+that worktree to the top, so a long run never sits unnoticed. Pairs naturally
+with the Active Agents panel above: get pinged, then jump straight to whoever
+needs you.
+→ [`components/notifications.md`](components/notifications.md)
 
 ## And the fundamentals, done right
 
