@@ -26,6 +26,16 @@ struct AskAgentHelpPromptTests {
     #expect(AskAgentHelpPrompt.languageKey(for: Locale(identifier: "zh-Hans-US")) == .simplifiedChinese)
   }
 
+  @Test func docPathTrailingSlashIsNormalized() {
+    let strings = AskAgentHelpPrompt.strings(
+      docsDirectoryPath: "/Applications/Prowl.app/Contents/Resources/docs/",
+      locale: Locale(identifier: "en_US")
+    )
+    #expect(strings.prompt.contains("/Applications/Prowl.app/Contents/Resources/docs/README.md"))
+    #expect(strings.prompt.contains("/Applications/Prowl.app/Contents/Resources/docs/overview.md"))
+    #expect(!strings.prompt.contains("docs//README.md"))
+  }
+
   @Test func promptEmbedsResolvedDocPaths() {
     let docs = "/Applications/Prowl.app/Contents/Resources/docs"
     let strings = AskAgentHelpPrompt.strings(docsDirectoryPath: docs, locale: Locale(identifier: "en_US"))

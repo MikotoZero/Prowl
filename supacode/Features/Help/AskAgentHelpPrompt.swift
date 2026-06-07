@@ -61,8 +61,14 @@ nonisolated enum AskAgentHelpPrompt {
   }
 
   static func strings(docsDirectoryPath: String, locale: Locale = .current) -> AskAgentHelpStrings {
-    let readme = "\(docsDirectoryPath)/README.md"
-    let overview = "\(docsDirectoryPath)/overview.md"
+    // The resolved bundle path is a directory URL, so it can carry a trailing
+    // slash — strip it so we don't compose `docs//README.md`.
+    var base = docsDirectoryPath
+    while base.hasSuffix("/") {
+      base.removeLast()
+    }
+    let readme = "\(base)/README.md"
+    let overview = "\(base)/overview.md"
     switch languageKey(for: locale) {
     case .english:
       return english(readme: readme, overview: overview)
@@ -125,7 +131,7 @@ nonisolated enum AskAgentHelpPrompt {
         - 索引：    \(readme)
         - 亮点：    \(overview)
 
-        请先读这两份——索引里链接了各功能的分册（在同一文件夹下），按需打开相关的。然后：
+        请先读这两份——索引里链接了各功能的分册（在同一文件夹下），可以按需打开。然后：
 
         1. 简要告诉我 Prowl 是什么、为什么值得我花时间。
         2. 结合你对我工作方式的了解（我的项目、工具和习惯），推荐 3–4 个真正能帮到我的 Prowl 功能或用法，每个配一句“怎么用”。
@@ -155,7 +161,7 @@ nonisolated enum AskAgentHelpPrompt {
         - 索引：    \(readme)
         - 亮點：    \(overview)
 
-        請先讀這兩份——索引裡連結了各功能的分冊（在同一資料夾下），按需開啟相關的。然後：
+        請先讀這兩份——索引裡連結了各功能的分冊（在同一資料夾下），可以按需開啟。然後：
 
         1. 簡要告訴我 Prowl 是什麼、為什麼值得我花時間。
         2. 結合你對我工作方式的了解（我的專案、工具和習慣），推薦 3–4 個真正能幫到我的 Prowl 功能或用法，每個配一句「怎麼用」。
