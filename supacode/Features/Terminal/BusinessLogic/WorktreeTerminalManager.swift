@@ -21,6 +21,11 @@ final class WorktreeTerminalManager {
   private var lastNotificationIndicatorCount: Int?
   private var eventContinuation: AsyncStream<TerminalClient.Event>.Continuation?
   private var pendingEvents: [TerminalClient.Event] = []
+  private var eventCoalescer = TerminalEventCoalescer()
+  /// Caps the live stream and the pre-subscription backlog so a producer that
+  /// outruns the single main-actor consumer can't grow memory without bound.
+  private static let eventBufferCap = 2048
+  private static let pendingEventCap = 1024
   var selectedWorktreeID: Worktree.ID?
   /// The worktree+tab focused in Canvas, updated by CanvasView on card tap.
   /// Used by toggleCanvas to know which worktree to return to.
@@ -189,9 +194,15 @@ final class WorktreeTerminalManager {
 
   func eventStream() -> AsyncStream<TerminalClient.Event> {
     eventContinuation?.finish()
-    let (stream, continuation) = AsyncStream.makeStream(of: TerminalClient.Event.self)
+    let (stream, continuation) = AsyncStream.makeStream(
+      of: TerminalClient.Event.self,
+      bufferingPolicy: .bufferingNewest(Self.eventBufferCap)
+    )
     eventContinuation = continuation
     lastNotificationIndicatorCount = nil
+    // A new subscriber must be re-seeded with current state, so the dedup cache
+    // can't suppress the next emit as a duplicate of one the old stream saw.
+    eventCoalescer.reset()
     if !pendingEvents.isEmpty {
       let bufferedEvents = pendingEvents
       pendingEvents.removeAll()
@@ -359,8 +370,10 @@ final class WorktreeTerminalManager {
 
   func prune(keeping worktreeIDs: Set<Worktree.ID>) {
     var removed: [WorktreeTerminalState] = []
+    var removedIDs: Set<Worktree.ID> = []
     for (id, state) in states where !worktreeIDs.contains(id) {
       removed.append(state)
+      removedIDs.insert(id)
     }
     for state in removed {
       state.closeAllSurfaces()
@@ -369,6 +382,7 @@ final class WorktreeTerminalManager {
       terminalLogger.info("Pruned \(removed.count) terminal state(s)")
     }
     states = states.filter { worktreeIDs.contains($0.key) }
+    eventCoalescer.forget(worktreeIDs: removedIDs)
     emitNotificationIndicatorCountIfNeeded()
   }
 
@@ -527,7 +541,12 @@ final class WorktreeTerminalManager {
   }
 
   private func emit(_ event: TerminalClient.Event) {
+    guard eventCoalescer.shouldEmit(event) else { return }
     guard let eventContinuation else {
+      if pendingEvents.count >= Self.pendingEventCap {
+        pendingEvents.removeFirst()
+        terminalLogger.debug("Dropped oldest pending terminal event (backlog cap reached)")
+      }
       pendingEvents.append(event)
       return
     }
