@@ -18,6 +18,14 @@ struct AskAgentHelpPromptTests {
     #expect(AskAgentHelpPrompt.languageKey(for: Locale(identifier: "zh-Hans")) == .simplifiedChinese)
   }
 
+  // Script wins over region: e.g. a Simplified-Chinese user living in Japan
+  // reports `zh-Hans-JP` — region JP must not flip it to English/Traditional.
+  @Test func chineseScriptWinsOverNonChineseRegion() {
+    #expect(AskAgentHelpPrompt.languageKey(for: Locale(identifier: "zh-Hans-JP")) == .simplifiedChinese)
+    #expect(AskAgentHelpPrompt.languageKey(for: Locale(identifier: "zh-Hant-JP")) == .traditionalChinese)
+    #expect(AskAgentHelpPrompt.languageKey(for: Locale(identifier: "zh-Hans-US")) == .simplifiedChinese)
+  }
+
   @Test func promptEmbedsResolvedDocPaths() {
     let docs = "/Applications/Prowl.app/Contents/Resources/docs"
     let strings = AskAgentHelpPrompt.strings(docsDirectoryPath: docs, locale: Locale(identifier: "en_US"))

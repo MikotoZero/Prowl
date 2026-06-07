@@ -12,7 +12,7 @@ struct AskAgentHelpView: View {
 
   init(
     docsDirectoryPath: String = AskAgentHelpView.resolvedDocsDirectoryPath,
-    locale: Locale = .current,
+    locale: Locale = AskAgentHelpPrompt.systemPreferredLocale(),
     onDone: @escaping () -> Void
   ) {
     self.strings = AskAgentHelpPrompt.strings(docsDirectoryPath: docsDirectoryPath, locale: locale)

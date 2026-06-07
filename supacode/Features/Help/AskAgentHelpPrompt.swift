@@ -25,18 +25,30 @@ nonisolated enum AskAgentHelpPrompt {
     case japanese
   }
 
+  /// The user's top system-preferred language, independent of the app's bundle
+  /// localizations. Prowl ships English only, so `Locale.current` is capped to
+  /// English even on, say, a Simplified-Chinese system — but the prompt should
+  /// follow the *system* language. `Locale.preferredLanguages` is not capped.
+  static func systemPreferredLocale() -> Locale {
+    Locale(identifier: Locale.preferredLanguages.first ?? "en")
+  }
+
   /// Resolve which prompt language to use from a locale. Chinese disambiguates
-  /// Hans/Hant by script, falling back to region (TW/HK/MO → Traditional).
-  /// Anything we don't translate falls back to English (which still asks the
-  /// agent to reply in the user's preferred language).
+  /// Hans/Hant by script (then the identifier text, then region — e.g.
+  /// `zh-Hans-JP` is Simplified even though its region is JP). Anything we don't
+  /// translate falls back to English (which still asks the agent to reply in the
+  /// user's preferred language).
   static func languageKey(for locale: Locale) -> LanguageKey {
     switch locale.language.languageCode?.identifier {
     case "ja":
       return .japanese
     case "zh":
-      if let script = locale.language.script?.identifier {
-        return script == "Hant" ? .traditionalChinese : .simplifiedChinese
-      }
+      let script = locale.language.script?.identifier
+      if script == "Hant" { return .traditionalChinese }
+      if script == "Hans" { return .simplifiedChinese }
+      let identifier = locale.identifier
+      if identifier.contains("Hant") { return .traditionalChinese }
+      if identifier.contains("Hans") { return .simplifiedChinese }
       switch locale.region?.identifier {
       case "TW", "HK", "MO":
         return .traditionalChinese
