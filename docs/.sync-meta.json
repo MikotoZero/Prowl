@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "42180405d77d03d288b182465d286f73c810be16",
-  "last_synced_date": "2026-06-07",
-  "note": "Added 'Ask Agent About Prowl' in-app help (Help menu + sidebar footer) that copies a localized prompt pointing the user's agent at the bundled docs; documented it in overview.md's 'How a human typically uses Prowl with this doc set' section. Other changes in range (SupacodePaths bundled-docs path, app wiring) are internal."
+  "last_synced_commit": "2948302ef96b03c17be1ff929e3753743ac39e7a",
+  "last_synced_date": "2026-06-09",
+  "note": "No doc edits needed: the two user-facing features in range — GitHub merge-queue status in the PR popover/sidebar/badges (#425) and per-worktree custom name/parent-folder override (#424) — were already documented in their feature PRs (github-pull-requests.md merge-queue note, repositories-and-worktrees.md Advanced section), and verified against PullRequestMergeQueueStatus.swift. Remaining changes are perf/polish/bug-fixes (event coalescing, sheet/palette flicker fixes, window-position persistence, focus-after-nav) that don't change documented behavior. Baseline bump only."
 }
