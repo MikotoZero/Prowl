@@ -21,6 +21,9 @@ final class WindowTabbingView: NSView, NSWindowDelegate {
     guard let window else { return }
     window.tabbingMode = .disallowed
     window.identifier = NSUserInterfaceItemIdentifier(WindowID.main)
+    // Persist the main window's position and size across launches. Idempotent:
+    // re-associating the same autosave name on later passes is a no-op.
+    window.setFrameAutosaveName(NSWindow.FrameAutosaveName(WindowID.main))
     window.isExcludedFromWindowsMenu = true
     if window.delegate !== self {
       window.delegate = self
