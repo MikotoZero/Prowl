@@ -589,7 +589,7 @@ extension RepositoriesFeature {
         }
       }
       guard let id = state.worktreeID(byOffset: 1) else { return .none }
-      return .send(.selectWorktree(id))
+      return .send(.selectWorktree(id, focusTerminal: true))
 
     case .selectPreviousWorktree:
       if state.isShelfActive, let worktree = state.selectedTerminalWorktree {
@@ -598,7 +598,7 @@ extension RepositoriesFeature {
         }
       }
       guard let id = state.worktreeID(byOffset: -1) else { return .none }
-      return .send(.selectWorktree(id))
+      return .send(.selectWorktree(id, focusTerminal: true))
 
     case .consumeCanvasFocusRequest(let id):
       if state.pendingCanvasFocusRequest?.id == id {

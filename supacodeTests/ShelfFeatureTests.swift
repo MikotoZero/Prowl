@@ -513,6 +513,7 @@ struct ShelfFeatureTests {
       $0.sidebarSelectedWorktreeIDs = [wt2.id]
       $0.openedWorktreeIDs = [wt2.id]
       $0.worktreeHistoryBackStack = [wt1.id]
+      $0.pendingTerminalFocusWorktreeIDs = [wt2.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()

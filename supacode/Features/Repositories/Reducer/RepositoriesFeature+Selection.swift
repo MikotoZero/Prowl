@@ -184,6 +184,8 @@ func navigateWorktreeHistory(
   }
   setSingleWorktreeSelection(destinationID, state: &state, recordHistory: false)
   state.openedWorktreeIDs.insert(destinationID)
+  // Match sidebar/arrow navigation: focus the terminal of the worktree we land on.
+  state.pendingTerminalFocusWorktreeIDs.insert(destinationID)
   return .send(.delegate(.selectedWorktreeChanged(state.worktree(for: destinationID))))
 }
 
