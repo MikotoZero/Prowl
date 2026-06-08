@@ -4,12 +4,126 @@
 
 | Key | Value |
 | --- | --- |
-| Commit | `5e88ec5dfc74af165781e8d5a41505867b23dc06` |
-| Tag | post-v0.8.5 |
-| Date | 2026-05-05 |
+| Commit | `1d888dbc30f564ed9e8ed26b55c13da961b0887f` |
+| Tag | post-v0.10.2 |
+| Date | 2026-06-05 |
 
 All upstream changes up to and including this commit have been reviewed.
 Future upstream checks should only inspect commits **after** this baseline.
+
+---
+
+## 2026-06-09 — Review through post-v0.10.2
+
+### Upstream changes reviewed
+
+Reviewed 55 commits on `supabitapp/supacode` from `5e88ec5d` (post-v0.8.5, 2026-05-05) through
+`1d888dbc` (post-v0.10.2, 2026-06-05), spanning upstream releases v0.9.0 → v0.10.2. The fork is now
+aligned to this tip; the next `/check-upstream-changes` run only needs to diff against `1d888dbc`.
+
+### Ported into the fork
+
+Equivalent behavior landed via dedicated fork PRs (fork implementations may differ to fit Prowl's
+architecture):
+
+| Upstream | Fork |
+| --- | --- |
+| `b1b65bf7` #378 — Tolerate login-shell noise in `gh` JSON output | PR #418 (`24027a91`) |
+| `b1ecdf3d` #376 — Cap and coalesce terminal event streams | PR #416 (`2800fd0b`) |
+| `974455b1` #347 — Coalesce OSC-9 progress to cut tab-bar lag | PR #415 (`7e0c9c76`) |
+| `c0c1c2ac` #332 — Per-surface `@Observable` notification dot | PR #417 (`6fab2d28`) |
+| `955c1943` #329 / `be322039` #336 — Detail/menu-bar + split-tree perf (FocusedAction wrapper, drop AnyView erasure) | PR #414 (`c9f5100e`, `db2f39d0`) |
+| `65c87e30` #371 — Focus the terminal after worktree navigation | PR #419 (`e02c76f0`) |
+| `fc4e4b0b` #353 — Selected command-palette row legibility | PR #420 (`3b499662`) |
+| `66b300d1` #313 — Persist main window position and size | (`02e13192`, PR #420) |
+| `3073482c` #352 — GitHub merge-queue state in PR popover/sidebar | PR #425 (`0b00ac62`) |
+| `4abbe946` #351 — Override new worktree name and parent directory | PR #424 (`2acb948b`) |
+| `813f44e3` #344 — Refresh hyperlink highlight on modifier press | PR #423 (`da8cfb39`) |
+| `3ccd25a3` #310 — Sheet dismiss flash via TCA view-side APIs | PR #422 (`5f5393e2`) |
+
+### Reviewed and skipped (architectural / not applicable)
+
+- **zmx terminal-session persistence track** (`90b61140` #334, `4d50d48d` #360, `96392760` #368,
+  `a536175f` #369, `f645bbf7` #356/#357, `b1e275a6` #361) — upstream moved terminal persistence onto a
+  bundled `zmx` multiplexer. The fork keeps its own terminal-layout persistence and has no `zmx`
+  dependency, so the whole track is skipped.
+- **Hook-driven coding-agent integration** (`b47fee03` #307, `dfc5d6f6` #311, `7e3ddb98` #374 Kiro,
+  `ac5d84c6` #317, `6fdfb3c8` #330) — relies on upstream's settings/hook modules that this fork does
+  not carry.
+- **Naming / appearance already diverged** (`a4a4457d` #312 capitalize "Supacode" → fork rebrands to
+  Prowl; `4d07b0a5` #308 / `563e6913` #367 per-worktree title+color → fork uses its richer repo-level
+  appearance model, consistent with the earlier #276 decision; `662b6eee` #321 terminal theme,
+  `98b4cf1b` #320 repo·branch·worktree title, `c7891f9c` #305 custom-script color picker, `e6fd77ee`
+  #358 Rename Branch → fork already ships equivalents).
+- **Release housekeeping** — `bump v0.9.0`…`v0.10.2` tags do not apply (date-based fork releases).
+
+### Not yet ported — re-evaluate next round
+
+Reviewed but not carried over this round; candidates for future sync depending on need:
+`1d888dbc` #381 (cross-fade shortcut hints), `4be71a58` #350 (worktree base-ref picker),
+`0f02f7cb` #349 (stop sidebar shimmer when idle), `b69ce38e` #346 (re-surface archived worktrees
+during delete), `b1b4c4f4` #345 (focus tab surface on tab-bar click), `9959f956` #340 (terminal flash
+/ stuck pending worktrees), `7f1b2bb7` #339 (lock worktrees against prune), `19491fe1` #337
+(split-zoom indicator), `861d70b7` #333 (freeze blocking-script tabs), `28e47c04` #331 (repo tag
+truncation priority), `0b66caf5` #328 (Pinned/Active sidebar sections), `0a2548ca` #324 (nest sidebar
+by branch + onboarding), `0a1ed578` #323 (sidebar perf/refresh), `9b62f0d5` #322 (folder/disabled-slot
+hotkeys), `54cda551` #318 (split terminal File menu), `288d2f3f` #301 (window-layer terminal tint),
+`31804471` #289/#306 (configurable Window-menu shortcut), `7700b841` #314 (`.inMemory` UserDefaults in
+tests).
+
+### Full upstream inventory (post-v0.8.5 → post-v0.10.2)
+
+Flat list of all 49 non-release commits in range, for cross-reference:
+
+- `1d888dbc` Cross-fade shortcut hints and drop the hold-to-reveal delay (#381)
+- `b1b65bf7` Tolerate login-shell noise in GitHub CLI JSON output (#378)
+- `b1ecdf3d` Cap and coalesce terminal event streams to reduce memory growth (#376)
+- `7e3ddb98` Fix Kiro CLI version detection to use kiro-cli instead of kiro (#374)
+- `96392760` Run surfaces under zmx via a Ghostty command-wrapper so shells keep full integration (#368)
+- `65c87e30` Always focus the terminal after worktree navigation (#371)
+- `a536175f` Persist terminal layouts incrementally and reap zmx sessions by attach state (#369)
+- `563e6913` Collapse the new-worktree appearance section and mirror the title placeholder (#367)
+- `4d07b0a5` Add per-worktree title and color customization (#308)
+- `b1e275a6` Hydrate the Active sidebar section from persisted layouts on relaunch (#361)
+- `4d50d48d` Build zmx as a universal macOS binary so Intel Macs can launch terminals (#360)
+- `e6fd77ee` Add a Rename Branch sheet to the sidebar context menu and command palette (#358)
+- `f645bbf7` Disable Ghostty auto shell-integration to fix terminal launch crash (#356) (#357)
+- `fc4e4b0b` Improve the readability of the selected command palette row (#353)
+- `3073482c` Show GitHub merge queue state in the PR popover and sidebar (#352)
+- `4abbe946` Let users override the new worktree's name and parent directory (#351)
+- `4be71a58` Let users pick the worktree base ref from local and remote branches (#350)
+- `0f02f7cb` Stop the sidebar shimmer when an agent is awaiting input or idle (#349)
+- `974455b1` Fix tab-bar progress lag and cut animation/re-render cost during agent activity (#347)
+- `b69ce38e` Re-surface archived worktrees in the sidebar while their delete script runs (#346)
+- `b1b4c4f4` Focus tab's focused surface on tab bar click (#345)
+- `813f44e3` Refresh hyperlink highlight on modifier press without mouse move (#344)
+- `90b61140` Persist terminal sessions across app launches with bundled zmx (#334)
+- `9959f956` Fix terminal flash and stuck pending worktrees on sidebar selection (#340)
+- `7f1b2bb7` Lock Supacode worktrees so prune can't drop them (#339)
+- `19491fe1` Add split-zoom indicator button to tab bar (#337)
+- `be322039` Observe trees dict so split-tree view re-renders on structural changes (#336)
+- `861d70b7` Freeze blocking-script tabs after completion (#333)
+- `c0c1c2ac` Move surface notification dot to per-surface @Observable state (#332)
+- `28e47c04` Give repo tag truncation priority over trail in sidebar highlight subtitle (#331)
+- `6fdfb3c8` Drop `ghostty +list-themes` reference from terminal theme toggle (#330)
+- `955c1943` Detail-view + menu-bar performance: per-tab observation, snapshot caches, FocusedAction wrapper (#329)
+- `0b66caf5` Highlight relevant sidebar rows with Pinned / Active sections (#328)
+- `0a2548ca` Nest sidebar worktrees by branch with onboarding card (#324)
+- `0a1ed578` Improve sidebar performance and refresh reliability (#323)
+- `9b62f0d5` Fix worktree-selection hotkeys for folders and disabled slots (#322)
+- `662b6eee` Add Supacode Terminal Theme toggle with glass background (#321)
+- `98b4cf1b` Replace toolbar branch button with repo · branch · worktree title (#320)
+- `54cda551` Add split terminal File menu, drop hover popover, mimic Ghostty's terminal commands (#318)
+- `ac5d84c6` Fix `supacode settings repo` and add a per-repo Scripts subsection (#317)
+- `7700b841` Use `.inMemory` UserDefaults in SidebarPersistenceMigratorTests (#314)
+- `66b300d1` Persist window position and size across sessions (#313)
+- `a4a4457d` Capitalize app name to Supacode in user-facing strings (#312)
+- `dfc5d6f6` Auto-update agent integrations and collapse hooks to one per slot (#311)
+- `3ccd25a3` Fix sheet dismiss flash by migrating to TCA 1.7 view-side APIs (#310)
+- `b47fee03` Add hook-driven coding-agent presence + sidebar setup card (#307)
+- `31804471` Make the Window-menu Supacode entry shortcut configurable (#289) (#306)
+- `c7891f9c` Add global scripts and color picker for custom scripts (#305)
+- `288d2f3f` Paint terminal tint at the window layer; keep chrome transparent (#301)
 
 ---
 
