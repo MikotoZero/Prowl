@@ -46,19 +46,30 @@ struct WorktreeCreationPromptView: View {
       }
 
       DisclosureGroup("Advanced", isExpanded: $store.showAdvancedOptions) {
-        VStack(alignment: .leading, spacing: 8) {
-          TextField(
-            "Worktree name",
-            text: $store.worktreeNameOverride,
-            prompt: Text(store.worktreeNamePlaceholder)
-          )
-          .textFieldStyle(.roundedBorder)
-          TextField(
-            "Parent folder",
-            text: $store.worktreePathOverride,
-            prompt: Text(store.defaultWorktreeBaseDirectory)
-          )
-          .textFieldStyle(.roundedBorder)
+        VStack(alignment: .leading, spacing: 12) {
+          Text("Override where the new worktree folder is created. Leave a field blank to use its default.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Worktree name")
+              .foregroundStyle(.secondary)
+            TextField(
+              "Worktree name",
+              text: $store.worktreeNameOverride,
+              prompt: Text(store.worktreeNamePlaceholder)
+            )
+            .textFieldStyle(.roundedBorder)
+          }
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Parent folder")
+              .foregroundStyle(.secondary)
+            TextField(
+              "Parent folder",
+              text: $store.worktreePathOverride,
+              prompt: Text(store.defaultWorktreeBaseDirectory)
+            )
+            .textFieldStyle(.roundedBorder)
+          }
         }
         .padding(.top, 4)
       }
