@@ -84,9 +84,10 @@ func replacementBookAfterClosing(
 }
 
 /// Returns the Shelf book at `offset` positions from the currently open
-/// book (wrapping around the book list). Returns nil if there are no
-/// books. When there is no open book, offset > 0 picks the first book
-/// and offset < 0 picks the last.
+/// book. Returns nil at the list edges instead of wrapping around, so
+/// Shelf navigation behaves like bounded horizontal movement. When
+/// there is no open book, offset > 0 picks the first book and offset < 0
+/// picks the last.
 func shelfBook(
   atOffset offset: Int,
   state: RepositoriesFeature.State
@@ -96,7 +97,8 @@ func shelfBook(
   if let currentID = state.openShelfBookID,
     let currentIndex = books.firstIndex(where: { $0.id == currentID })
   {
-    let nextIndex = (currentIndex + offset + books.count) % books.count
+    let nextIndex = currentIndex + offset
+    guard books.indices.contains(nextIndex) else { return nil }
     return books[nextIndex]
   }
   return offset > 0 ? books.first : books.last

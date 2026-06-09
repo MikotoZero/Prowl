@@ -33,9 +33,11 @@ otherwise it's a no-op.
 So `⌘⌃←/→` moves **between agents**, and `⌘⌃↑/↓` moves **between that agent's
 tabs** — triage six in-flight agents one keystroke at a time.
 
-Two-finger horizontal swipes on the trackpad also flip between books. Vertical
-scrolling inside the terminal keeps working normally; Shelf only consumes a swipe
-after the horizontal movement clearly dominates.
+Two-finger horizontal swipes on the trackpad also flip between books: swipe left
+to move to the book on the right, and swipe right to move to the book on the
+left. Book switching is bounded at the shelf edges; it does not wrap around.
+Vertical scrolling inside the terminal keeps working normally; Shelf only
+consumes a swipe after the horizontal movement clearly dominates.
 
 ## Interacting with spines
 
@@ -100,5 +102,5 @@ See [view-modes](view-modes.md).
   running from a different working directory, the full Active Agents panel still
   shows the resolved repository/branch context.
 - Closing the last tab of a book removes the book from the shelf.
-- The book-cycling keys (`⌘⌃←/→`) and tab-cycling keys (`⌘⌃↑/↓`) differ only by
-  arrow direction — be precise when describing them.
+- The book-switching keys (`⌘⌃←/→`) and tab-cycling keys (`⌘⌃↑/↓`) differ only
+  by arrow direction — be precise when describing them.

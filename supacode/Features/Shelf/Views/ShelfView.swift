@@ -361,7 +361,7 @@ private struct ShelfSwipeEventMonitor: NSViewRepresentable {
         return event
       }
 
-      let direction: ShelfSwipeDirection = accumulatedDeltaX > 0 ? .next : .previous
+      let direction: ShelfSwipeDirection = accumulatedDeltaX > 0 ? .previous : .next
       resetAccumulatedDeltas()
       didTriggerCurrentGesture = true
       onSwipe(direction)
