@@ -1,5 +1,26 @@
 # Changelog
 
+## [2026.6.9](https://github.com/onevcat/Prowl/releases/tag/v2026.6.9)
+
+### New
+
+- The New Worktree dialog now has an **Advanced** section where you can override the worktree's folder name and parent directory for that creation. Both fields are optional; leaving them blank keeps the default `<base>/<branch>` placement.
+- PRs waiting in a GitHub merge queue now appear as **Queued** (brown label) in the worktree sidebar, with position and estimated time shown in the PR checks popover and a tinted badge.
+
+### Improved
+
+- App menus no longer flicker or collapse while agents are actively streaming output. Progress bar updates are coalesced to reduce CPU usage, and the terminal event buffer is capped to keep memory stable across long multi-agent sessions.
+
+### Fixed
+
+- The terminal now receives keyboard focus automatically after navigating with Select Next/Previous Worktree or Back/Forward in Worktree History.
+- GitHub CLI output is now parsed correctly when your login shell (`.zprofile`, `.zlogin`) prints a banner before the JSON — previously this caused a "data couldn't be read" error in GitHub settings.
+- The main window now restores its position and size across launches.
+- Command palette: the selected row is legible in light mode, and opening the palette in light mode no longer briefly flashes dark.
+- The New Worktree dialog no longer flashes empty content while sliding closed.
+- Holding Cmd over a hyperlink in a non-focused terminal split now highlights the link immediately, without requiring a mouse move.
+- Find Next and Find Previous in the terminal menu now display their keyboard shortcut correctly.
+
 ## [2026.6.7](https://github.com/onevcat/Prowl/releases/tag/v2026.6.7)
 
 This release focuses on Canvas improvements, CLI automation additions, and a new in-app help feature for agent-assisted onboarding.
