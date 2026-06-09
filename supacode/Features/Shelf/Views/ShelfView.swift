@@ -42,6 +42,9 @@ struct ShelfView: View {
     let openIndex = openBook.flatMap { book in
       books.firstIndex(where: { $0.id == book.id })
     }
+    let activeAgentEntriesByWorktreeID = Dictionary(grouping: state.activeAgents.entries) { entry in
+      entry.worktreeID
+    }
     // Color identity of the open book's repo (nil ⇒ neutral surface). Shared
     // by the spine fill and the toolbar band so they read as one "L".
     let openColor = openBook.flatMap { repositoryAppearances[$0.repositoryID]?.color }
@@ -59,7 +62,12 @@ struct ShelfView: View {
 
     HStack(spacing: 0) {
       ForEach(Array(books.enumerated()), id: \.element.id) { index, book in
-        spine(book: book, index: index, openIndex: openIndex)
+        spine(
+          book: book,
+          index: index,
+          openIndex: openIndex,
+          activeAgentEntries: activeAgentEntriesByWorktreeID[book.id] ?? []
+        )
         if book.id == openBookID {
           openBookArea(for: book, state: state)
         }
@@ -83,7 +91,12 @@ struct ShelfView: View {
   }
 
   @ViewBuilder
-  private func spine(book: ShelfBook, index: Int, openIndex: Int?) -> some View {
+  private func spine(
+    book: ShelfBook,
+    index: Int,
+    openIndex: Int?,
+    activeAgentEntries: [ActiveAgentEntry]
+  ) -> some View {
     let distance = openIndex.map { abs(index - $0) }
     let open = index == openIndex
     ShelfSpineView(
@@ -91,10 +104,14 @@ struct ShelfView: View {
       isOpen: open,
       distanceFromOpen: distance,
       terminalState: terminalManager.stateIfExists(for: book.id),
+      activeAgentEntries: activeAgentEntries,
       tintFallback: settingsFile.global.shelfSpineTintFallback,
       followsRepositoryColor: settingsFile.global.shelfSpineTintFollowsRepositoryColor,
       onOpenBook: { openBook(book, selectingTab: nil) },
       onSelectTab: { tabID in openBook(book, selectingTab: tabID) },
+      onSelectAgent: { agentID in
+        store.send(.activeAgents(.entryTapped(agentID)))
+      },
       onNewTab: {
         // On a closed spine, `+` doubles as "pull this book out and
         // start a fresh tab". Sequencing is fine because TCA runs

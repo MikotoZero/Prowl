@@ -69,6 +69,37 @@ struct ActiveAgentsFeatureTests {
     #expect(ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: 250) == 120)
   }
 
+  @Test func detectionStaysEnabledForVisiblePanelAutoShowOrShelf() {
+    #expect(
+      ActiveAgentsFeature.detectionEnabled(
+        isPanelHidden: false,
+        autoShowPanel: false,
+        isShelfVisible: false
+      )
+    )
+    #expect(
+      ActiveAgentsFeature.detectionEnabled(
+        isPanelHidden: true,
+        autoShowPanel: true,
+        isShelfVisible: false
+      )
+    )
+    #expect(
+      ActiveAgentsFeature.detectionEnabled(
+        isPanelHidden: true,
+        autoShowPanel: false,
+        isShelfVisible: true
+      )
+    )
+    #expect(
+      !ActiveAgentsFeature.detectionEnabled(
+        isPanelHidden: true,
+        autoShowPanel: false,
+        isShelfVisible: false
+      )
+    )
+  }
+
   @Test func navigationReturnsNilForEmptyList() {
     let entries: IdentifiedArrayOf<ActiveAgentEntry> = []
     #expect(ActiveAgentsFeature.entryID(navigatingFrom: nil, direction: .next, in: entries) == nil)

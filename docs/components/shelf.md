@@ -5,13 +5,15 @@
 
 **Keywords:** shelf, book, spine, vertical tabs, flip, cycle books, cycle tabs, triage, proximity, stack
 
-**Related:** [view-modes](view-modes.md) · [canvas](canvas.md) · [terminal](terminal.md) · [keyboard-shortcuts](../reference/keyboard-shortcuts.md)
+**Related:** [view-modes](view-modes.md) · [canvas](canvas.md) · [terminal](terminal.md) · [active-agents](active-agents.md) · [keyboard-shortcuts](../reference/keyboard-shortcuts.md)
 
 ## What it is
 
 Shelf lays your worktrees out as thin vertical **spines** ("books") on the sides,
 with the currently open book's terminal filling the center. Each spine shows the
 project icon/name (rotated) and a column of its **tabs** as small icon slots.
+When Prowl detects agents in that book, the bottom of the spine also shows compact
+agent badges with their current status.
 Books near the open one are brighter; distant ones fade — so you always know where
 you are in the stack.
 
@@ -38,6 +40,8 @@ tabs** — triage six in-flight agents one keystroke at a time.
 - **Select a tab:** click a tab slot on the open book's spine.
 - **New tab:** the **+** at the bottom of a spine. On a closed book, **+** opens
   the book and creates the tab.
+- **Jump to an agent:** click an agent badge at the bottom of a spine. It focuses
+  that agent's worktree, tab, and pane.
 - **Split:** the open book's spine has **split-vertical** and **split-horizontal**
   buttons (Ghostty `new_split:right` / `new_split:down`).
 - **Close a tab:** hover a tab slot → its **×**.
@@ -55,6 +59,10 @@ selection.
   progressively — a proximity ladder that keeps the stack readable.
 - **Unread notification:** a tab slot highlights orange; the spine header shows an
   orange dot.
+- **Detected agents:** compact badges appear at the bottom of the owning spine.
+  Badge color/status follows the Active Agents states (Working, Blocked, Done,
+  Idle); blocked agents are prioritized first. Shelf keeps agent detection active
+  while visible, even if the Active Agents panel is hidden.
 - Spine tint follows the **repository color** when set (toggle
   `shelfSpineTintFollowsRepositoryColor`); otherwise a fallback
   (`shelfSpineTintFallback`: neutral or system tint) is used.
@@ -84,6 +92,9 @@ See [view-modes](view-modes.md).
 ## Gotchas for agents
 
 - A "book" is a **worktree**; a tab slot is a **tab** within it.
+- Agent badges belong to the terminal surface's owning worktree. If an agent is
+  running from a different working directory, the full Active Agents panel still
+  shows the resolved repository/branch context.
 - Closing the last tab of a book removes the book from the shelf.
 - The book-cycling keys (`⌘⌃←/→`) and tab-cycling keys (`⌘⌃↑/↓`) differ only by
   arrow direction — be precise when describing them.

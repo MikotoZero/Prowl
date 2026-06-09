@@ -66,6 +66,9 @@ When nothing is running: "New agents will appear here".
   events — which usually coincides with, but is not the same as, a detected finish.
 - **Canvas** ([canvas](canvas.md)) is the spatial counterpart — cards light up on
   that same notification/unread signal, not on the detected status itself.
+- **Shelf** ([shelf](shelf.md)) mirrors detected agents as compact status badges
+  at the bottom of each owning spine; clicking a badge uses the same jump-to-agent
+  behavior as clicking a panel row.
 
 ## Gotchas for agents
 

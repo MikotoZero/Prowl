@@ -20,12 +20,14 @@ struct ShelfSpineView: View {
   /// glance instead of every non-open spine looking identical.
   let distanceFromOpen: Int?
   let terminalState: WorktreeTerminalState?
+  let activeAgentEntries: [ActiveAgentEntry]
   let tintFallback: ShelfSpineTintFallback
   let followsRepositoryColor: Bool
   let onOpenBook: () -> Void
   let onSelectTab: (TerminalTabID) -> Void
-  /// Bottom controls — provided only for the open book's spine. `nil`
-  /// suppresses the trio entirely.
+  let onSelectAgent: (ActiveAgentEntry.ID) -> Void
+  /// Bottom controls. New Tab is available on every spine; split actions
+  /// are only provided for the open book's spine.
   let onNewTab: (() -> Void)?
   let onSplitVertical: (() -> Void)?
   let onSplitHorizontal: (() -> Void)?
@@ -55,7 +57,7 @@ struct ShelfSpineView: View {
     VStack(spacing: 0) {
       headerButton
       tabList
-      bottomControls
+      footer
     }
     .frame(width: ShelfMetrics.spineWidth)
     // `maxHeight: .infinity` binds the spine to the parent Shelf's
@@ -189,6 +191,66 @@ struct ShelfSpineView: View {
     }
   }
 
+  private var prioritizedActiveAgentEntries: [ActiveAgentEntry] {
+    activeAgentEntries.sorted { lhs, rhs in
+      let lhsPriority = lhs.displayState.shelfSpinePriority
+      let rhsPriority = rhs.displayState.shelfSpinePriority
+      if lhsPriority != rhsPriority {
+        return lhsPriority < rhsPriority
+      }
+      return lhs.lastChangedAt > rhs.lastChangedAt
+    }
+  }
+
+  private var visibleActiveAgentEntries: [ActiveAgentEntry] {
+    let entries = prioritizedActiveAgentEntries
+    guard entries.count > ShelfMetrics.maximumVisibleAgentBadges else { return entries }
+    return Array(entries.prefix(ShelfMetrics.maximumVisibleAgentBadges - 1))
+  }
+
+  private var hiddenActiveAgentCount: Int {
+    max(0, activeAgentEntries.count - visibleActiveAgentEntries.count)
+  }
+
+  private var hasBottomControls: Bool {
+    onNewTab != nil || onSplitVertical != nil || onSplitHorizontal != nil
+  }
+
+  @ViewBuilder
+  private var footer: some View {
+    // The footer stays pinned under the scrollable tab list. Active agents
+    // share the same compact slot language as tabs/controls so each spine
+    // remains a quick vertical scan instead of becoming a second panel.
+    if !activeAgentEntries.isEmpty || hasBottomControls {
+      VStack(spacing: ShelfMetrics.slotSpacing) {
+        Divider().opacity(0.3)
+        activeAgentBadges
+        if !activeAgentEntries.isEmpty && hasBottomControls {
+          Divider().opacity(0.3)
+        }
+        bottomControls
+      }
+      .padding(.horizontal, ShelfMetrics.slotHorizontalPadding)
+      .padding(.top, ShelfMetrics.sectionGap)
+      .padding(.bottom, ShelfMetrics.slotSpacing)
+    }
+  }
+
+  @ViewBuilder
+  private var activeAgentBadges: some View {
+    if !activeAgentEntries.isEmpty {
+      ForEach(visibleActiveAgentEntries) { entry in
+        ShelfSpineAgentBadge(
+          entry: entry,
+          action: { onSelectAgent(entry.id) }
+        )
+      }
+      if hiddenActiveAgentCount > 0 {
+        ShelfSpineAgentOverflowBadge(count: hiddenActiveAgentCount)
+      }
+    }
+  }
+
   @ViewBuilder
   private var bottomControls: some View {
     // `+` is shown on every spine, not just the open one: clicking it on a
@@ -196,37 +258,31 @@ struct ShelfSpineView: View {
     // caller sequences `selectWorktree` → `newTerminal`). Splits only
     // make sense against a focused surface, so they stay scoped to the
     // open book.
-    if onNewTab != nil || onSplitVertical != nil || onSplitHorizontal != nil {
-      VStack(spacing: ShelfMetrics.slotSpacing) {
-        Divider().opacity(0.3)
-        if let onNewTab {
-          ShelfSpineControlButton(
-            systemImage: "plus",
-            label: "New Tab",
-            shortcut: ghosttyShortcuts.display(for: "new_tab"),
-            action: onNewTab
-          )
-        }
-        if let onSplitVertical {
-          ShelfSpineControlButton(
-            systemImage: "square.split.2x1",
-            label: "Split Vertically",
-            shortcut: ghosttyShortcuts.display(for: "new_split:right"),
-            action: onSplitVertical
-          )
-        }
-        if let onSplitHorizontal {
-          ShelfSpineControlButton(
-            systemImage: "square.split.1x2",
-            label: "Split Horizontally",
-            shortcut: ghosttyShortcuts.display(for: "new_split:down"),
-            action: onSplitHorizontal
-          )
-        }
+    if hasBottomControls {
+      if let onNewTab {
+        ShelfSpineControlButton(
+          systemImage: "plus",
+          label: "New Tab",
+          shortcut: ghosttyShortcuts.display(for: "new_tab"),
+          action: onNewTab
+        )
       }
-      .padding(.horizontal, ShelfMetrics.slotHorizontalPadding)
-      .padding(.top, ShelfMetrics.sectionGap)
-      .padding(.bottom, ShelfMetrics.slotSpacing)
+      if let onSplitVertical {
+        ShelfSpineControlButton(
+          systemImage: "square.split.2x1",
+          label: "Split Vertically",
+          shortcut: ghosttyShortcuts.display(for: "new_split:right"),
+          action: onSplitVertical
+        )
+      }
+      if let onSplitHorizontal {
+        ShelfSpineControlButton(
+          systemImage: "square.split.1x2",
+          label: "Split Horizontally",
+          shortcut: ghosttyShortcuts.display(for: "new_split:down"),
+          action: onSplitHorizontal
+        )
+      }
     }
   }
 
@@ -542,6 +598,97 @@ private struct ShelfSpineTabSlot: View {
   }
 }
 
+private struct ShelfSpineAgentBadge: View {
+  let entry: ActiveAgentEntry
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      ZStack(alignment: .bottomTrailing) {
+        RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
+          .fill(entry.displayState.foregroundStyle.opacity(0.12))
+          .overlay {
+            RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
+              .stroke(entry.displayState.foregroundStyle.opacity(0.45), lineWidth: 1)
+          }
+
+        agentIcon
+          .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
+
+        statusMarker
+          .offset(x: 2, y: 2)
+      }
+      .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .help(helpText)
+    .accessibilityLabel(Text(accessibilityLabel))
+  }
+
+  @ViewBuilder
+  private var agentIcon: some View {
+    if let icon = CommandIconMap.iconForFirstToken(entry.agent.iconLookupToken) {
+      TabIconImage(
+        rawName: icon.storageString,
+        pointSize: ShelfMetrics.agentBadgeIconPointSize
+      )
+      .foregroundStyle(.primary)
+    } else {
+      Image(systemName: "sparkle")
+        .imageScale(.small)
+        .foregroundStyle(.primary)
+        .accessibilityHidden(true)
+    }
+  }
+
+  private var statusMarker: some View {
+    Image(systemName: entry.displayState.shelfSpineStatusSymbol)
+      .font(.caption2.weight(.bold))
+      .foregroundStyle(entry.displayState.foregroundStyle)
+      .frame(
+        width: ShelfMetrics.agentStatusMarkerSize,
+        height: ShelfMetrics.agentStatusMarkerSize
+      )
+      .background {
+        Circle().fill(.background)
+      }
+      .accessibilityHidden(true)
+  }
+
+  private var helpText: String {
+    let tabTitle = ActiveAgentsPanel.tabTitle(for: entry)
+    return "Jump to \(entry.agent.displayName): \(entry.displayState.label) - \(tabTitle)"
+  }
+
+  private var accessibilityLabel: String {
+    "Jump to \(entry.agent.displayName), \(entry.displayState.label)"
+  }
+}
+
+private struct ShelfSpineAgentOverflowBadge: View {
+  let count: Int
+
+  var body: some View {
+    Text("+\(count)")
+      .font(.caption2.weight(.semibold).monospacedDigit())
+      .foregroundStyle(.secondary)
+      .lineLimit(1)
+      .minimumScaleFactor(0.7)
+      .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
+      .background {
+        RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
+          .fill(Color.primary.opacity(0.06))
+      }
+      .help(helpText)
+      .accessibilityLabel(Text(helpText))
+  }
+
+  private var helpText: String {
+    "\(count) more active agents"
+  }
+}
+
 private struct ShelfSpineControlButton: View {
   let systemImage: String
   let label: String
@@ -582,6 +729,9 @@ enum ShelfMetrics {
   /// doesn't crowd into the divider above the `+` button.
   static let sectionGap: CGFloat = 10
   static let aggregatedDotSize: CGFloat = 6
+  static let maximumVisibleAgentBadges = 4
+  static let agentBadgeIconPointSize: CGFloat = 15
+  static let agentStatusMarkerSize: CGFloat = 11
   /// Max pre-rotation width (i.e. visual height after 90° rotation) of the
   /// spine header title. Texts longer than this get middle-truncated.
   static let headerMaxLength: CGFloat = 160
@@ -591,4 +741,24 @@ enum ShelfMetrics {
   /// (`.font(.system(size:))`) and the asset (`.frame`) branches so
   /// branded artwork visually matches the SF-Symbol fallback.
   static let tabIconPointSize: CGFloat = 18
+}
+
+extension AgentDisplayState {
+  fileprivate var shelfSpinePriority: Int {
+    switch self {
+    case .blocked: return 0
+    case .working: return 1
+    case .done: return 2
+    case .idle: return 3
+    }
+  }
+
+  fileprivate var shelfSpineStatusSymbol: String {
+    switch self {
+    case .working: return "bolt.fill"
+    case .blocked: return "exclamationmark"
+    case .done: return "checkmark"
+    case .idle: return "circle.fill"
+    }
+  }
 }
