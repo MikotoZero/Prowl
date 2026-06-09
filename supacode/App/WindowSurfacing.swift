@@ -111,7 +111,7 @@ enum MainWindowSurface {
 
 @MainActor
 enum WindowLifecycleDiagnostics {
-  enum WindowlessStallReportDecision: Equatable {
+  enum WindowlessReportDecision: Equatable {
     case report
     case suppress
     case resolveVisibleMainWindow
@@ -240,7 +240,20 @@ enum WindowLifecycleDiagnostics {
 
   private static func reportWindowlessTimeoutIfNeeded(elapsed: TimeInterval) {
     guard !didReportWindowlessTimeout else { return }
-    guard windowlessContext != "launch" || NSApp.isActive else { return }
+    let windows = NSApplication.shared.windows
+    switch Self.windowlessTimeoutReportDecision(
+      appIsActive: NSApp.isActive,
+      windowlessContext: windowlessContext,
+      snapshots: MainWindowSurface.snapshots(in: windows)
+    ) {
+    case .report:
+      break
+    case .suppress:
+      return
+    case .resolveVisibleMainWindow:
+      noteMainWindowAppeared()
+      return
+    }
     didReportWindowlessTimeout = true
     captureSentryEvent(kind: "main_window_timeout", elapsed: elapsed, lag: nil)
   }
@@ -268,11 +281,25 @@ enum WindowLifecycleDiagnostics {
   static func windowlessStallReportDecision(
     appIsActive: Bool,
     snapshots: [MainWindowSurface.Snapshot]
-  ) -> WindowlessStallReportDecision {
+  ) -> WindowlessReportDecision {
     if MainWindowSurface.hasVisibleMainWindow(in: snapshots) {
       return .resolveVisibleMainWindow
     }
     guard appIsActive else { return .suppress }
+    return .report
+  }
+
+  static func windowlessTimeoutReportDecision(
+    appIsActive: Bool,
+    windowlessContext: String?,
+    snapshots: [MainWindowSurface.Snapshot]
+  ) -> WindowlessReportDecision {
+    if MainWindowSurface.hasVisibleMainWindow(in: snapshots) {
+      return .resolveVisibleMainWindow
+    }
+    guard windowlessContext != "launch" || appIsActive else {
+      return .suppress
+    }
     return .report
   }
 
