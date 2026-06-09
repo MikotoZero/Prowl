@@ -73,4 +73,29 @@ struct WindowSurfacingTests {
       ) == .report
     )
   }
+
+  @MainActor
+  @Test func windowlessTimeoutReportResolvesVisibleMainWindowBeforeReporting() {
+    #expect(
+      WindowLifecycleDiagnostics.windowlessTimeoutReportDecision(
+        appIsActive: true,
+        windowlessContext: "surfaceMainWindow(openWindowRequested)",
+        snapshots: [MainWindowSurface.Snapshot(identifier: WindowID.main, isVisible: true)]
+      ) == .resolveVisibleMainWindow
+    )
+    #expect(
+      WindowLifecycleDiagnostics.windowlessTimeoutReportDecision(
+        appIsActive: false,
+        windowlessContext: "launch",
+        snapshots: []
+      ) == .suppress
+    )
+    #expect(
+      WindowLifecycleDiagnostics.windowlessTimeoutReportDecision(
+        appIsActive: true,
+        windowlessContext: "surfaceMainWindow(openWindowRequested)",
+        snapshots: [MainWindowSurface.Snapshot(identifier: WindowID.main, isVisible: false)]
+      ) == .report
+    )
+  }
 }
