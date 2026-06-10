@@ -336,7 +336,7 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
-  @Test(.dependencies) func selectNextShelfBookAtEndIsNoOp() async {
+  @Test(.dependencies) func selectNextShelfBookWrapsAround() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let wt1 = Worktree(
       id: "/tmp/repo",
@@ -368,10 +368,17 @@ struct ShelfFeatureTests {
     }
 
     await store.send(.selectNextShelfBook)
+    // Wrapping: next-after-last lands back on the first book.
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+      $0.pendingTerminalFocusWorktreeIDs = [wt1.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
   }
 
-  @Test(.dependencies) func selectPreviousShelfBookAtStartIsNoOp() async {
+  @Test(.dependencies) func selectPreviousShelfBookWrapsAround() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let wt1 = Worktree(
       id: "/tmp/repo",
@@ -403,6 +410,13 @@ struct ShelfFeatureTests {
     }
 
     await store.send(.selectPreviousShelfBook)
+    // Wrapping: previous-before-first lands on the last book.
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+      $0.pendingTerminalFocusWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
   }
 

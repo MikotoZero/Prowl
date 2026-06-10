@@ -35,7 +35,7 @@ tabs** — triage six in-flight agents one keystroke at a time.
 
 Hold `⌘` and use a two-finger trackpad swipe for directional navigation:
 horizontal swipes flip between books, and vertical swipes cycle tabs in the open
-book. Book switching is bounded at the shelf edges; it does not wrap around.
+book. Both axes wrap around, matching the `⌘⌃` arrow keys.
 Plain scrolling inside the terminal keeps working normally because Shelf only
 consumes the gesture while `⌘` is held.
 
@@ -105,5 +105,5 @@ See [view-modes](view-modes.md).
   an agent is running from a different working directory, the full Active Agents
   panel still shows the resolved repository/branch context.
 - Closing the last tab of a book removes the book from the shelf.
-- The book-switching keys (`⌘⌃←/→`) and tab-cycling keys (`⌘⌃↑/↓`) differ only
-  by arrow direction — be precise when describing them.
+- The book-cycling keys (`⌘⌃←/→`) and tab-cycling keys (`⌘⌃↑/↓`) differ only by
+  arrow direction — be precise when describing them.
