@@ -163,8 +163,57 @@ extension RepositoriesFeature {
       return .merge(allEffects)
 
     case .requestRemoveRepository(let repositoryID):
+      if let repository = state.repositories[id: repositoryID], repository.isWorkspace {
+        state.removeWorkspaceConfirmation = RemoveWorkspaceConfirmation(
+          repositoryID: repositoryID,
+          workspaceTitle: repository.name,
+          rootPath: repository.rootURL.path(percentEncoded: false)
+        )
+        return .none
+      }
       state.alert = confirmationAlertForRepositoryRemoval(repositoryID: repositoryID, state: state)
       return .none
+
+    case .removeWorkspaceDeleteFilesChanged(let deleteFiles):
+      state.removeWorkspaceConfirmation?.deleteFiles = deleteFiles
+      return .none
+
+    case .removeWorkspacePromptDismissed:
+      state.removeWorkspaceConfirmation = nil
+      return .none
+
+    case .removeWorkspacePromptConfirmed:
+      guard let confirmation = state.removeWorkspaceConfirmation else {
+        return .none
+      }
+      state.removeWorkspaceConfirmation = nil
+      guard let repository = state.repositories[id: confirmation.repositoryID],
+        !state.removingRepositoryIDs.contains(repository.id)
+      else {
+        return .none
+      }
+      state.removingRepositoryIDs.insert(repository.id)
+      let selectionWasRemoved =
+        state.selectedWorktreeID.map { id in
+          repository.worktrees.contains(where: { $0.id == id })
+        } ?? false
+      guard confirmation.deleteFiles, let workspace = repository.workspace else {
+        return .send(
+          .repositoryManagement(
+            .repositoryRemoved(repository.id, selectionWasRemoved: selectionWasRemoved)
+          )
+        )
+      }
+      let rootURL = repository.rootURL
+      let gitRunner = Self.workspaceGitRunner(shellClient: shellClient)
+      return .run { send in
+        await ProjectWorkspace.cleanup(workspace, rootURL: rootURL, gitRunner: gitRunner)
+        await send(
+          .repositoryManagement(
+            .repositoryRemoved(repository.id, selectionWasRemoved: selectionWasRemoved)
+          )
+        )
+      }
 
     case .removeFailedRepository(let repositoryID):
       state.alert = nil

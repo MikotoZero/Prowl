@@ -1106,6 +1106,61 @@ struct RepositoriesFeatureTests {
     await store.receive(.delegate(.baseRefSourceChanged(repositoryID)))
   }
 
+  @Test func requestRemoveWorkspaceShowsConfirmationSheet() async {
+    let workspaceID = "/tmp/ws"
+    let repository = makeRepository(
+      id: workspaceID,
+      name: "WS",
+      kind: .plain,
+      worktrees: [],
+      workspace: ProjectWorkspace(title: "WS")
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.repositoryManagement(.requestRemoveRepository(workspaceID))) {
+      $0.removeWorkspaceConfirmation = RemoveWorkspaceConfirmation(
+        repositoryID: workspaceID,
+        workspaceTitle: "WS",
+        rootPath: workspaceID
+      )
+    }
+    await store.send(.repositoryManagement(.removeWorkspaceDeleteFilesChanged(true))) {
+      $0.removeWorkspaceConfirmation?.deleteFiles = true
+    }
+    await store.send(.repositoryManagement(.removeWorkspacePromptDismissed)) {
+      $0.removeWorkspaceConfirmation = nil
+    }
+  }
+
+  @Test func removeWorkspaceConfirmedRemovesEntry() async {
+    let workspaceID = "/tmp/ws"
+    let repository = makeRepository(
+      id: workspaceID,
+      name: "WS",
+      kind: .plain,
+      worktrees: [],
+      workspace: ProjectWorkspace(title: "WS")
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = { [] }
+      $0.repositoryPersistence.saveRepositoryEntries = { _ in }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositoryManagement(.requestRemoveRepository(workspaceID)))
+    await store.send(.repositoryManagement(.removeWorkspacePromptConfirmed)) {
+      $0.removeWorkspaceConfirmation = nil
+      $0.removingRepositoryIDs = [workspaceID]
+    }
+    await store.receive(\.repositoryManagement.repositoryRemoved)
+    await store.finish()
+  }
+
   @Test func workspaceCreationCancelWhileCreatingShowsToast() async {
     var initialState = RepositoriesFeature.State()
     initialState.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(

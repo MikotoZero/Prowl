@@ -69,6 +69,13 @@ struct ForceDeleteBranchRequest: Equatable {
   let errorMessage: String
 }
 
+struct RemoveWorkspaceConfirmation: Equatable {
+  let repositoryID: Repository.ID
+  let workspaceTitle: String
+  let rootPath: String
+  var deleteFiles = false
+}
+
 @Reducer
 struct RepositoriesFeature {
   enum CancelID {
@@ -209,6 +216,9 @@ struct RepositoriesFeature {
     )
     case requestRemoveRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
+    case removeWorkspaceDeleteFilesChanged(Bool)
+    case removeWorkspacePromptDismissed
+    case removeWorkspacePromptConfirmed
     case repositoryRemoved(Repository.ID, selectionWasRemoved: Bool)
     case openRepositorySettings(Repository.ID)
   }
@@ -290,6 +300,7 @@ struct RepositoriesFeature {
     @Shared(.appStorage("prowlCreatedWorktreeIDs")) var prowlCreatedWorktreeIDs: [Worktree.ID] = []
     var nextDeleteWorktreeConfirmationID = 0
     var deleteWorktreeConfirmation: DeleteWorktreeConfirmation?
+    var removeWorkspaceConfirmation: RemoveWorkspaceConfirmation?
     var pendingForceDeleteBranchRequests: [ForceDeleteBranchRequest] = []
     var nextPendingSidebarRevealID = 0
     var pendingSidebarReveal: PendingSidebarReveal?

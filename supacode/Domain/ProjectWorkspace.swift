@@ -558,6 +558,44 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     await task.value
   }
 
+  // Best-effort removal cleanup: every failure is logged and the remaining
+  // entries are still processed so a broken repository cannot block deletion.
+  static func cleanup(
+    _ workspace: ProjectWorkspace,
+    rootURL: URL,
+    fileManager: FileManager = .default,
+    gitRunner: ProjectWorkspaceGitRunner
+  ) async {
+    let rootPath = normalizedPath(rootURL, resolvingSymlinks: false)
+    for entry in workspace.repositories {
+      let entryURL = entry.resolvedURL(relativeTo: rootURL)
+      let entryPath = entryURL.path(percentEncoded: false)
+      guard entryPath.hasPrefix(rootPath + "/") else {
+        continue
+      }
+      let isSymbolicLink =
+        (try? entryURL.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
+      guard !isSymbolicLink, entry.sourceKind != .remote, let sourceLocation = entry.sourceLocation else {
+        continue
+      }
+      do {
+        try await gitRunner.run(
+          ProjectWorkspaceGitCommand(
+            arguments: ["-C", sourceLocation, "worktree", "remove", "--force", entryPath],
+            currentDirectoryURL: nil
+          )
+        )
+      } catch {
+        log.warning("Workspace cleanup could not unregister worktree at \(entryPath): \(error)")
+      }
+    }
+    do {
+      try fileManager.removeItem(at: rootURL)
+    } catch {
+      log.warning("Workspace cleanup could not remove \(rootPath): \(error)")
+    }
+  }
+
   static func defaultWorkspaceFolderName(for title: String) -> String {
     let sanitized = sanitizedWorkspaceComponent(title)
     return sanitized.isEmpty ? "workspace" : sanitized

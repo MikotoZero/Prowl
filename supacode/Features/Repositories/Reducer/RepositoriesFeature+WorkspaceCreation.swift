@@ -170,7 +170,7 @@ extension RepositoriesFeature {
     state.workspaceCreationPrompt?.repositories[id: repositoryID] = repository
   }
 
-  private static func workspaceGitRunner(shellClient: ShellClient) -> ProjectWorkspaceGitRunner {
+  static func workspaceGitRunner(shellClient: ShellClient) -> ProjectWorkspaceGitRunner {
     ProjectWorkspaceGitRunner { command in
       do {
         _ = try await shellClient.run(

@@ -676,6 +676,61 @@ struct ProjectWorkspaceTests {
     )
   }
 
+  @Test func cleanupUnregistersWorktreesAndRemovesFolder() async throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    let linkedSourceURL = try makeTemporaryWorkspaceRoot()
+    let bareURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: linkedSourceURL)
+      try? FileManager.default.removeItem(at: bareURL)
+    }
+    try FileManager.default.createSymbolicLink(
+      at: rootURL.appending(path: "app"),
+      withDestinationURL: linkedSourceURL
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL.appending(path: "api"),
+      withIntermediateDirectories: true
+    )
+
+    let workspace = ProjectWorkspace(
+      repositories: [
+        ProjectWorkspace.RepositoryEntry(
+          id: "app",
+          name: "App",
+          path: "app",
+          sourceKind: .existingPath,
+          sourceLocation: linkedSourceURL.path(percentEncoded: false)
+        ),
+        ProjectWorkspace.RepositoryEntry(
+          id: "api",
+          name: "API",
+          path: "api",
+          sourceKind: .bareRepository,
+          sourceLocation: bareURL.path(percentEncoded: false),
+          branchName: "chore/x"
+        ),
+      ]
+    )
+    let commands = LockIsolated<[ProjectWorkspaceGitCommand]>([])
+    let apiPath = rootURL.appending(path: "api").standardizedFileURL.path(percentEncoded: false)
+    await ProjectWorkspace.cleanup(
+      workspace,
+      rootURL: rootURL,
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        commands.withValue { $0.append(command) }
+      }
+    )
+
+    #expect(
+      commands.value.map(\.arguments) == [
+        ["-C", bareURL.path(percentEncoded: false), "worktree", "remove", "--force", apiPath]
+      ])
+    #expect(!FileManager.default.fileExists(atPath: rootURL.path(percentEncoded: false)))
+    #expect(FileManager.default.fileExists(atPath: linkedSourceURL.path(percentEncoded: false)))
+  }
+
   @Test func listRuntimeContextsReportWorkspaceKind() {
     let rootURL = URL(fileURLWithPath: "/tmp/workspace")
     let repository = Repository(

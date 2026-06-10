@@ -86,6 +86,17 @@ Branch behavior is explicit:
   branch — aligning a same-named local branch to the remote when one exists.
   Git refuses if that branch is already checked out in another worktree.
 
+## Removing a workspace
+
+**Remove Repository** on a workspace opens a dedicated confirmation. By default
+it only removes the entry from Prowl and leaves everything on disk. Tick **Also
+delete the workspace folder and its worktrees** to additionally unregister the
+worktrees that were created for this workspace from their source repositories
+(`git worktree remove --force`) and delete the workspace folder. Linked
+repositories stay untouched — only the symlinks inside the workspace folder are
+removed. Cleanup is best-effort: a broken source repository is logged and
+skipped instead of blocking the deletion.
+
 ## Metadata
 
 Example `.prowl/workspace.json`:
