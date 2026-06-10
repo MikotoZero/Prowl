@@ -8,6 +8,8 @@ struct GitClientDependency: Sendable {
   var localBranchNames: @Sendable (URL) async throws -> Set<String>
   var isValidBranchName: @Sendable (String, URL) async -> Bool
   var branchRefs: @Sendable (URL) async throws -> [String]
+  var branchRefOptions: @Sendable (URL) async throws -> [GitBranchRefOption]
+  var remoteBranchRefs: @Sendable (String) async throws -> GitRemoteBranchRefs
   var defaultRemoteBranchRef: @Sendable (URL) async throws -> String?
   var automaticWorktreeBaseRef: @Sendable (URL) async -> String?
   var ignoredFileCount: @Sendable (URL) async throws -> Int
@@ -47,6 +49,8 @@ extension GitClientDependency: DependencyKey {
       await GitClient().isValidBranchName(branchName, for: repoRoot)
     },
     branchRefs: { try await GitClient().branchRefs(for: $0) },
+    branchRefOptions: { try await GitClient().branchRefOptions(for: $0) },
+    remoteBranchRefs: { try await GitClient().remoteBranchRefs(for: $0) },
     defaultRemoteBranchRef: { try await GitClient().defaultRemoteBranchRef(for: $0) },
     automaticWorktreeBaseRef: { await GitClient().automaticWorktreeBaseRef(for: $0) },
     ignoredFileCount: { try await GitClient().ignoredFileCount(for: $0) },

@@ -59,7 +59,7 @@ extension RepositoriesFeature {
       let baseRef = Self.trimmedNonEmpty(repository.baseRef)
       let baseRefOptions = ProjectWorkspaceCreationRepository.normalizedBaseRefOptions(options)
       repository.baseRefOptions = baseRefOptions
-      if let baseRef, baseRefOptions.contains(baseRef) {
+      if let baseRef, baseRefOptions.contains(where: { $0.ref == baseRef }) {
         repository.baseRef = baseRef
       } else {
         repository.baseRef = defaultBaseRef
@@ -186,7 +186,7 @@ extension RepositoriesFeature {
   private static func workspaceBaseRefs(
     for repository: ProjectWorkspaceCreationRepository,
     gitClient: GitClientDependency
-  ) async -> (options: [String], defaultBaseRef: String?) {
+  ) async -> (options: [GitBranchRefOption], defaultBaseRef: String?) {
     switch repository.sourceKind {
     case .remote:
       return ([], nil)
@@ -195,7 +195,7 @@ extension RepositoriesFeature {
       guard let sourceURL = repository.localSourceURL else {
         let options = ProjectWorkspaceCreationRepository.baseRefOptions(
           automaticBaseRef: nil,
-          refs: []
+          options: []
         )
         return (options, nil)
       }
@@ -208,10 +208,10 @@ extension RepositoriesFeature {
       }
 
       let automaticBaseRef = await gitClient.automaticWorktreeBaseRef(repositoryURL)
-      let refs = (try? await gitClient.branchRefs(repositoryURL)) ?? []
+      let refs = (try? await gitClient.branchRefOptions(repositoryURL)) ?? []
       let options = ProjectWorkspaceCreationRepository.baseRefOptions(
         automaticBaseRef: automaticBaseRef,
-        refs: refs
+        options: refs
       )
       let defaultBaseRef =
         automaticBaseRef != nil || !refs.isEmpty

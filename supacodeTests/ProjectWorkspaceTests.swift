@@ -7,6 +7,22 @@ import Testing
 
 @MainActor
 struct ProjectWorkspaceTests {
+  @Test func baseRefOptionsKeepsDetectedKindForAutomaticSlashBranch() {
+    let options = ProjectWorkspaceCreationRepository.baseRefOptions(
+      automaticBaseRef: "feature/login",
+      options: [
+        GitBranchRefOption(ref: "feature/login", kind: .local),
+        GitBranchRefOption(ref: "origin/main", kind: .remoteTracking),
+      ]
+    )
+
+    #expect(
+      options == [
+        GitBranchRefOption(ref: "feature/login", kind: .local),
+        GitBranchRefOption(ref: "origin/main", kind: .remoteTracking),
+      ])
+  }
+
   @Test func loadsWorkspaceMetadataWithDefaultsAndSnakeCaseSources() throws {
     let rootURL = try makeTemporaryWorkspaceRoot()
     defer { try? FileManager.default.removeItem(at: rootURL) }
@@ -244,6 +260,65 @@ struct ProjectWorkspaceTests {
     #expect(loaded.repositories.map(\.sourceLocation) == ["git@github.com:onevcat/app.git", barePath])
     #expect(loaded.repositories.map(\.branchName) == ["codex/app", "codex/api"])
     #expect(loaded.repositories.map(\.baseRef) == ["origin/main", "main"])
+  }
+
+  @Test func createWorkspaceUsesExistingRefsWithoutCreatingBranches() async throws {
+    let rootURL = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-existing-ref-workspace-\(UUID().uuidString)")
+      .standardizedFileURL
+    let bareURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: bareURL)
+    }
+    let commands = LockIsolated<[ProjectWorkspaceGitCommand]>([])
+    _ = try await ProjectWorkspace.create(
+      ProjectWorkspaceCreationRequest(
+        draft: ProjectWorkspaceCreationDraft(
+          title: "Existing Refs",
+          rootURL: rootURL,
+          repositories: [
+            ProjectWorkspaceCreationRepository(
+              id: "app",
+              name: "App",
+              sourceKind: .remote,
+              sourceLocation: "git@github.com:onevcat/app.git",
+              checkoutMode: .useExistingRef,
+              branchName: "codex/app",
+              baseRef: "origin/feature/login",
+              path: "app"
+            ),
+            ProjectWorkspaceCreationRepository(
+              id: "api",
+              name: "API",
+              sourceKind: .bareRepository,
+              sourceLocation: bareURL.path(percentEncoded: false),
+              checkoutMode: .useExistingRef,
+              branchName: "codex/api",
+              baseRef: "main",
+              path: "api"
+            ),
+          ]
+        ),
+        createdAt: Date(timeIntervalSince1970: 3_456_789)
+      ),
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        commands.withValue { $0.append(command) }
+      }
+    )
+
+    let rootPath = rootURL.path(percentEncoded: false)
+    let barePath = normalizedTestPath(bareURL)
+    #expect(
+      commands.value.map(\.arguments) == [
+        ["clone", "git@github.com:onevcat/app.git", "\(rootPath)/app"],
+        ["-C", "\(rootPath)/app", "checkout", "feature/login"],
+        ["-C", barePath, "worktree", "add", "\(rootPath)/api", "main"],
+      ])
+
+    let loaded = try #require(ProjectWorkspace.load(from: rootURL))
+    #expect(loaded.repositories.map(\.branchName) == [nil, nil])
+    #expect(loaded.repositories.map(\.baseRef) == ["origin/feature/login", "main"])
   }
 
   @Test func listRuntimeContextsReportWorkspaceKind() {

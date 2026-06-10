@@ -579,7 +579,7 @@ struct RepositoriesFeatureTests {
     } withDependencies: {
       $0.gitClient.repoRoot = { url in url }
       $0.gitClient.automaticWorktreeBaseRef = { _ in "master" }
-      $0.gitClient.branchRefs = { _ in ["master"] }
+      $0.gitClient.branchRefOptions = { _ in [GitBranchRefOption(ref: "master", kind: .local)] }
     }
 
     await store.send(.workspaceCreation(.promptRequested)) {
@@ -604,7 +604,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.workspaceCreation.baseRefsLoaded) {
       $0.workspaceCreationPrompt?.repositories[id: "/tmp/repo-a"]?.baseRef = "master"
       $0.workspaceCreationPrompt?.repositories[id: "/tmp/repo-a"]?.baseRefOptions = [
-        "master"
+        GitBranchRefOption(ref: "master", kind: .local)
       ]
     }
   }
@@ -630,8 +630,16 @@ struct RepositoriesFeatureTests {
       $0.gitClient.automaticWorktreeBaseRef = { url in
         url.path(percentEncoded: false) == repoRootA ? "main" : "master"
       }
-      $0.gitClient.branchRefs = { url in
-        url.path(percentEncoded: false) == repoRootA ? ["main", "origin/main"] : ["master", "origin/master"]
+      $0.gitClient.branchRefOptions = { url in
+        url.path(percentEncoded: false) == repoRootA
+          ? [
+            GitBranchRefOption(ref: "main", kind: .local),
+            GitBranchRefOption(ref: "origin/main", kind: .remoteTracking),
+          ]
+          : [
+            GitBranchRefOption(ref: "master", kind: .local),
+            GitBranchRefOption(ref: "origin/master", kind: .remoteTracking),
+          ]
       }
     }
 
@@ -658,15 +666,15 @@ struct RepositoriesFeatureTests {
     await store.receive(\.workspaceCreation.baseRefsLoaded) {
       $0.workspaceCreationPrompt?.repositories[id: repoRootA]?.baseRef = "main"
       $0.workspaceCreationPrompt?.repositories[id: repoRootA]?.baseRefOptions = [
-        "main",
-        "origin/main",
+        GitBranchRefOption(ref: "main", kind: .local),
+        GitBranchRefOption(ref: "origin/main", kind: .remoteTracking),
       ]
     }
     await store.receive(\.workspaceCreation.baseRefsLoaded) {
       $0.workspaceCreationPrompt?.repositories[id: repoRootB]?.baseRef = "master"
       $0.workspaceCreationPrompt?.repositories[id: repoRootB]?.baseRefOptions = [
-        "master",
-        "origin/master",
+        GitBranchRefOption(ref: "master", kind: .local),
+        GitBranchRefOption(ref: "origin/master", kind: .remoteTracking),
       ]
     }
   }
@@ -713,7 +721,99 @@ struct RepositoriesFeatureTests {
     )
   }
 
-  @Test func workspaceCreationPromptAddsRemoteAndLocalRepositories() async {
+  @Test func workspaceCreationPromptAddsRemoteRepositoryAfterLoadingRefs() async {
+    let options = [
+      GitBranchRefOption(ref: "origin/feature/login", kind: .fetchedRemote),
+      GitBranchRefOption(ref: "origin/main", kind: .fetchedRemote),
+    ]
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [],
+        title: "Workspace",
+        rootPath: "/tmp/workspace",
+        selectedRepositoryIDs: []
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.remoteBranchRefs = { remoteURL in
+        #expect(remoteURL == "git@github.com:onevcat/app.git")
+        return GitRemoteBranchRefs(options: options, defaultBaseRef: "origin/main")
+      }
+    }
+
+    await store.send(.addRemoteButtonTapped) {
+      $0.remoteRepositoryPrompt = WorkspaceCreationPromptFeature.RemoteRepositoryPromptState()
+    }
+    await store.send(.remoteRepositoryPromptURLChanged(" git@github.com:onevcat/app.git ")) {
+      $0.remoteRepositoryPrompt?.url = " git@github.com:onevcat/app.git "
+      $0.remoteRepositoryPrompt?.name = "app"
+    }
+    await store.send(.remoteRepositoryPromptLoadButtonTapped) {
+      $0.remoteRepositoryPrompt?.url = "git@github.com:onevcat/app.git"
+      $0.remoteRepositoryPrompt?.isLoading = true
+    }
+    await store.receive(
+      .remoteRepositoryPromptLoaded(
+        "git@github.com:onevcat/app.git", GitRemoteBranchRefs(options: options, defaultBaseRef: "origin/main"))
+    ) {
+      $0.remoteRepositoryPrompt?.isLoading = false
+      $0.remoteRepositoryPrompt?.branchOptions = options
+      $0.remoteRepositoryPrompt?.defaultBaseRef = "origin/main"
+    }
+    await store.send(.remoteRepositoryPromptAddButtonTapped) {
+      $0.repositories.append(
+        ProjectWorkspaceCreationRepository(
+          id: UUID(0).uuidString,
+          name: "app",
+          sourceKind: .remote,
+          sourceLocation: "git@github.com:onevcat/app.git",
+          checkoutMode: .useExistingRef,
+          baseRef: "origin/main",
+          baseRefOptions: options
+        )
+      )
+      $0.selectedRepositoryIDs = [UUID(0).uuidString]
+      $0.remoteRepositoryPrompt = nil
+    }
+  }
+
+  @Test func workspaceCreationPromptRemoteLoadUsesDetectedDefaultFromOptions() async {
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [],
+        title: "Workspace",
+        rootPath: "/tmp/workspace",
+        selectedRepositoryIDs: []
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.addRemoteButtonTapped) {
+      $0.remoteRepositoryPrompt = WorkspaceCreationPromptFeature.RemoteRepositoryPromptState()
+    }
+    await store.send(
+      .remoteRepositoryPromptLoaded(
+        "",
+        GitRemoteBranchRefs(
+          options: [
+            GitBranchRefOption(ref: " origin/main ", kind: .fetchedRemote),
+            GitBranchRefOption(ref: "origin/main", kind: .fetchedRemote),
+          ],
+          defaultBaseRef: "origin/missing"
+        )
+      )
+    ) {
+      $0.remoteRepositoryPrompt?.branchOptions = [
+        GitBranchRefOption(ref: "origin/main", kind: .fetchedRemote)
+      ]
+      $0.remoteRepositoryPrompt?.defaultBaseRef = "origin/main"
+    }
+  }
+
+  @Test func workspaceCreationPromptAddsLocalRepository() async {
     let store = TestStore(
       initialState: WorkspaceCreationPromptFeature.State(
         repositories: [],
@@ -727,40 +827,18 @@ struct RepositoriesFeatureTests {
       $0.uuid = .incrementing
     }
 
-    await store.send(.addBlankRepository(.remote)) {
-      $0.repositories = [
-        ProjectWorkspaceCreationRepository(
-          id: UUID(0).uuidString,
-          name: "",
-          sourceKind: .remote,
-          sourceLocation: ""
-        )
-      ]
-      $0.selectedRepositoryIDs = [UUID(0).uuidString]
-    }
-
-    await store.send(.repositoryNameChanged(UUID(0).uuidString, "App")) {
-      $0.repositories[id: UUID(0).uuidString]?.name = "App"
-    }
-    await store.send(.repositorySourceLocationChanged(UUID(0).uuidString, "git@github.com:onevcat/app.git")) {
-      $0.repositories[id: UUID(0).uuidString]?.sourceLocation = "git@github.com:onevcat/app.git"
-    }
-    await store.send(.repositoryBranchNameChanged(UUID(0).uuidString, "codex/app")) {
-      $0.repositories[id: UUID(0).uuidString]?.branchName = "codex/app"
-    }
-
     await store.send(.addRepositoryFromURL(.localRepository, "/tmp/local-api")) {
       $0.repositories.append(
         ProjectWorkspaceCreationRepository(
-          id: UUID(1).uuidString,
+          id: UUID(0).uuidString,
           name: "local-api",
           sourceKind: .localRepository,
           sourceLocation: "/tmp/local-api"
         )
       )
-      $0.selectedRepositoryIDs = [UUID(0).uuidString, UUID(1).uuidString]
+      $0.selectedRepositoryIDs = [UUID(0).uuidString]
     }
-    await store.receive(.delegate(.baseRefSourceChanged(UUID(1).uuidString)))
+    await store.receive(.delegate(.baseRefSourceChanged(UUID(0).uuidString)))
   }
 
   @Test func workspaceCreationPromptRejectsUnknownBaseRef() async {
@@ -773,13 +851,13 @@ struct RepositoriesFeatureTests {
             id: repoRootA,
             name: "Repo A",
             rootURL: URL(fileURLWithPath: repoRootA),
-            baseRefOptions: ["main"]
+            baseRefOptions: [GitBranchRefOption(ref: "main", kind: .local)]
           ),
           ProjectWorkspaceCreationRepository(
             id: repoRootB,
             name: "Repo B",
             rootURL: URL(fileURLWithPath: repoRootB),
-            baseRefOptions: ["master"]
+            baseRefOptions: [GitBranchRefOption(ref: "master", kind: .local)]
           ),
         ],
         title: "Workspace",
@@ -793,6 +871,78 @@ struct RepositoriesFeatureTests {
     await store.send(.repositoryBaseRefChanged(repoRootA, "missing-branch"))
     await store.send(.repositoryBaseRefChanged(repoRootA, "main")) {
       $0.repositories[id: repoRootA]?.baseRef = "main"
+    }
+  }
+
+  @Test func workspaceCreationPromptRequiresExistingRefForUseExistingMode() async {
+    let repoRootA = "/tmp/repo-a"
+    let repoRootB = "/tmp/repo-b"
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [
+          ProjectWorkspaceCreationRepository(
+            id: repoRootA,
+            name: "Repo A",
+            rootURL: URL(fileURLWithPath: repoRootA),
+            checkoutMode: .useExistingRef,
+            baseRefOptions: [GitBranchRefOption(ref: "main", kind: .local)]
+          ),
+          ProjectWorkspaceCreationRepository(
+            id: repoRootB,
+            name: "Repo B",
+            rootURL: URL(fileURLWithPath: repoRootB)
+          ),
+        ],
+        title: "Workspace",
+        rootPath: "/tmp/workspace",
+        selectedRepositoryIDs: [repoRootA, repoRootB]
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.createButtonTapped) {
+      $0.validationMessage = "Choose an existing branch for Repo A."
+    }
+    await store.send(.repositoryBaseRefChanged(repoRootA, "main")) {
+      $0.repositories[id: repoRootA]?.baseRef = "main"
+      $0.validationMessage = nil
+    }
+  }
+
+  @Test func workspaceCreationPromptRequiresBranchNameForCreateBranchMode() async {
+    let repoRootB = "/tmp/repo-b"
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [
+          ProjectWorkspaceCreationRepository(
+            id: "remote",
+            name: "Remote",
+            sourceKind: .remote,
+            sourceLocation: "git@github.com:onevcat/app.git",
+            baseRef: "origin/main",
+            baseRefOptions: [GitBranchRefOption(ref: "origin/main", kind: .fetchedRemote)]
+          ),
+          ProjectWorkspaceCreationRepository(
+            id: repoRootB,
+            name: "Repo B",
+            rootURL: URL(fileURLWithPath: repoRootB)
+          ),
+        ],
+        title: "Workspace",
+        rootPath: "/tmp/workspace",
+        selectedRepositoryIDs: ["remote", repoRootB]
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.createButtonTapped) {
+      $0.validationMessage = "Branch name required for Remote."
+    }
+    await store.send(.repositoryBranchNameChanged("remote", "codex/app")) {
+      $0.repositories[id: "remote"]?.branchName = "codex/app"
+      $0.validationMessage = nil
     }
   }
 

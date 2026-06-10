@@ -23,6 +23,7 @@ enum GitOperation: String {
   case remoteInfo = "remote_info"
   case remoteList = "remote_list"
   case fetchRemote = "fetch_remote"
+  case remoteBranchRefs = "remote_branch_refs"
 }
 
 enum GitClientError: LocalizedError {
@@ -87,6 +88,42 @@ nonisolated enum GitRemoteMatcher {
       .sorted { $0.count > $1.count }
       .first { ref.hasPrefix("\($0)/") }
   }
+}
+
+nonisolated enum GitBranchRefKind: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
+  case local
+  case remoteTracking = "remote_tracking"
+  case fetchedRemote = "fetched_remote"
+
+  var title: String {
+    switch self {
+    case .local:
+      return "Local Branches"
+    case .remoteTracking:
+      return "Remote Branches"
+    case .fetchedRemote:
+      return "Fetched Remote Branches"
+    }
+  }
+}
+
+nonisolated struct GitBranchRefOption: Codable, Equatable, Hashable, Sendable, Identifiable {
+  var ref: String
+  var kind: GitBranchRefKind
+
+  var id: String {
+    "\(kind.rawValue):\(ref)"
+  }
+
+  init(ref: String, kind: GitBranchRefKind) {
+    self.ref = ref
+    self.kind = kind
+  }
+}
+
+nonisolated struct GitRemoteBranchRefs: Equatable, Sendable {
+  var options: [GitBranchRefOption]
+  var defaultBaseRef: String?
 }
 
 struct GitWtWorktreeEntry: Decodable, Equatable {

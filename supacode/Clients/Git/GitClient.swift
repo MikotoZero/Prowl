@@ -129,6 +129,14 @@ struct GitClient {
   }
 
   nonisolated func branchRefs(for repoRoot: URL) async throws -> [String] {
+    let options = try await branchRefOptions(for: repoRoot)
+    let refs = options.map(\.ref)
+      .filter { !$0.hasSuffix("/HEAD") }
+      .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    return deduplicated(refs)
+  }
+
+  nonisolated func branchRefOptions(for repoRoot: URL) async throws -> [GitBranchRefOption] {
     let path = repoRoot.path(percentEncoded: false)
     let localOutput = try await runGit(
       operation: .branchRefs,
@@ -136,14 +144,45 @@ struct GitClient {
         "-C",
         path,
         "for-each-ref",
-        "--format=%(refname:short)\t%(upstream:short)",
+        "--format=%(refname:short)",
         "refs/heads",
       ]
     )
-    let refs = parseLocalRefsWithUpstream(localOutput)
+    let remoteOutput = try await runGit(
+      operation: .branchRefs,
+      arguments: [
+        "-C",
+        path,
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/remotes",
+      ]
+    )
+    let localRefs = parseRefLines(localOutput)
       .filter { !$0.hasSuffix("/HEAD") }
       .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    return deduplicated(refs)
+    let remoteRefs = parseRefLines(remoteOutput)
+      .filter { !$0.hasSuffix("/HEAD") }
+      .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    return deduplicatedOptions(
+      localRefs.map { GitBranchRefOption(ref: $0, kind: .local) }
+        + remoteRefs.map { GitBranchRefOption(ref: $0, kind: .remoteTracking) }
+    )
+  }
+
+  nonisolated func remoteBranchRefs(for remoteURL: String) async throws -> GitRemoteBranchRefs {
+    let output = try await runGit(
+      operation: .remoteBranchRefs,
+      arguments: ["ls-remote", "--heads", "--symref", remoteURL]
+    )
+    let parsed = parseRemoteBranchRefs(output)
+    let options = parsed.refs
+      .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+      .map { GitBranchRefOption(ref: "origin/\($0)", kind: .fetchedRemote) }
+    let defaultBaseRef =
+      parsed.defaultBranch.map { "origin/\($0)" }
+      ?? options.first?.ref
+    return GitRemoteBranchRefs(options: deduplicatedOptions(options), defaultBaseRef: defaultBaseRef)
   }
 
   nonisolated func defaultRemoteBranchRef(for repoRoot: URL) async throws -> String? {
@@ -653,34 +692,62 @@ struct GitClient {
       .last { !$0.isEmpty }
   }
 
-  nonisolated private func parseLocalRefsWithUpstream(_ output: String) -> [String] {
+  nonisolated private func parseRefLines(_ output: String) -> [String] {
     output
       .split(whereSeparator: \.isNewline)
-      .flatMap { line -> [String] in
-        let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
-        guard let local = parts.first else {
-          return []
-        }
-        let localRef = String(local).trimmingCharacters(in: .whitespacesAndNewlines)
-        let upstreamRef =
-          parts.count > 1
-          ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-          : ""
-
-        var refs: [String] = []
-        if !localRef.isEmpty {
-          refs.append(localRef)
-        }
-        if !upstreamRef.isEmpty {
-          refs.append(upstreamRef)
-        }
-        return refs
+      .compactMap { line -> String? in
+        let ref = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+        return ref.isEmpty ? nil : ref
       }
+  }
+
+  nonisolated private func parseRemoteBranchRefs(_ output: String) -> (refs: [String], defaultBranch: String?) {
+    var refs: [String] = []
+    var defaultBranch: String?
+    for rawLine in output.split(whereSeparator: \.isNewline) {
+      let line = String(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
+      if line.hasPrefix("ref:") {
+        let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
+        guard parts.count >= 2, parts[1] == "HEAD" else {
+          continue
+        }
+        let target = parts[0]
+          .dropFirst("ref:".count)
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let branch = normalizeHeadRef(target) {
+          defaultBranch = branch
+        }
+        continue
+      }
+      let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
+      guard parts.count >= 2,
+        let branch = normalizeHeadRef(String(parts[1]))
+      else {
+        continue
+      }
+      refs.append(branch)
+    }
+    return (deduplicated(refs), defaultBranch)
+  }
+
+  nonisolated private func normalizeHeadRef(_ value: String) -> String? {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let prefix = "refs/heads/"
+    guard trimmed.hasPrefix(prefix) else {
+      return nil
+    }
+    let branch = String(trimmed.dropFirst(prefix.count))
+    return branch.isEmpty ? nil : branch
   }
 
   nonisolated private func deduplicated(_ values: [String]) -> [String] {
     var seen = Set<String>()
     return values.filter { seen.insert($0).inserted }
+  }
+
+  nonisolated private func deduplicatedOptions(_ options: [GitBranchRefOption]) -> [GitBranchRefOption] {
+    var seen = Set<String>()
+    return options.filter { seen.insert($0.id).inserted }
   }
 
   nonisolated private func normalizeRemoteRef(_ value: String) -> String? {

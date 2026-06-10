@@ -38,19 +38,28 @@ Repository sources can be mixed in one workspace:
   existing_path`.
 - Local repository folders selected from disk are added as symlinks with
   `source_kind: local_repository`.
-- Remote repositories are cloned into the workspace folder with `source_kind:
-  remote`. If a branch and base ref are supplied, Prowl checks out the branch
-  from the base after cloning.
+- Remote repositories are added through a URL prompt that loads remote heads
+  before inserting the row. They are cloned into the workspace folder with
+  `source_kind: remote`. The inserted row defaults to **Use Existing** on the
+  detected default remote branch.
 - Bare repositories are materialized with `git worktree add` and recorded with
   `source_kind: bare_repository`. If both branch and base ref are supplied,
   Prowl creates the worktree branch from that base ref.
 
 The creation prompt detects base-ref candidates for already opened, local, and
 bare repositories by reading local git refs, preferring the detected default
-branch such as `main` or `master`. Base refs are selected from detected refs so
-workspace creation does not try to checkout an arbitrary, nonexistent branch.
-Remote clone entries can be created without a base ref; after cloning, a branch
-name without an explicit base is created from the repository's default checkout.
+branch such as `main` or `master`. Refs are grouped as local branches, remote
+tracking branches, or fetched remote branches, and the picker supports simple
+text search. Base refs are selected from detected refs so workspace creation
+does not try to checkout an arbitrary, nonexistent branch.
+
+Branch behavior is explicit:
+
+- **Create Branch** uses `branch_name` plus the selected base ref to create a
+  new branch or worktree branch. Remote and bare sources require a branch name
+  in this mode.
+- **Use Existing** uses the selected ref directly. For remote clones, Prowl
+  checks out the selected remote branch after clone.
 
 ## Metadata
 

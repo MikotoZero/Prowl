@@ -12,6 +12,7 @@ struct WorkspaceCreationPromptFeature {
     var selectedRepositoryIDs: Set<Repository.ID>
     var validationMessage: String?
     var isCreating = false
+    var remoteRepositoryPrompt: RemoteRepositoryPromptState?
 
     var selectedRepositoryCount: Int {
       repositories.count { selectedRepositoryIDs.contains($0.id) }
@@ -38,13 +39,37 @@ struct WorkspaceCreationPromptFeature {
     }
   }
 
+  @ObservableState
+  struct RemoteRepositoryPromptState: Equatable {
+    var url = ""
+    var name = ""
+    var branchOptions: [GitBranchRefOption] = []
+    var defaultBaseRef: String?
+    var validationMessage: String?
+    var isLoading = false
+
+    var displayName: String {
+      let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? "Remote Repository" : trimmed
+    }
+  }
+
   enum Action: BindableAction, Equatable {
     case binding(BindingAction<State>)
     case addBlankRepository(ProjectWorkspaceRepositorySourceKind)
     case addRepositoryFromURL(ProjectWorkspaceRepositorySourceKind, String)
+    case addRemoteButtonTapped
+    case remoteRepositoryPromptURLChanged(String)
+    case remoteRepositoryPromptNameChanged(String)
+    case remoteRepositoryPromptLoadButtonTapped
+    case remoteRepositoryPromptLoaded(String, GitRemoteBranchRefs)
+    case remoteRepositoryPromptFailed(String)
+    case remoteRepositoryPromptAddButtonTapped
+    case remoteRepositoryPromptDismissed
     case removeRepository(Repository.ID)
     case repositorySelectionChanged(Repository.ID, Bool)
     case repositorySourceKindChanged(Repository.ID, ProjectWorkspaceRepositorySourceKind)
+    case repositoryCheckoutModeChanged(Repository.ID, ProjectWorkspaceRepositoryCheckoutMode)
     case repositoryNameChanged(Repository.ID, String)
     case repositoryPathChanged(Repository.ID, String)
     case repositorySourceChosen(Repository.ID, String)
@@ -67,6 +92,7 @@ struct WorkspaceCreationPromptFeature {
   }
 
   @Dependency(\.uuid) var uuid
+  @Dependency(GitClientDependency.self) var gitClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -88,6 +114,109 @@ struct WorkspaceCreationPromptFeature {
         )
         state.selectedRepositoryIDs.insert(id)
         state.validationMessage = nil
+        return .none
+
+      case .addRemoteButtonTapped:
+        state.remoteRepositoryPrompt = RemoteRepositoryPromptState()
+        state.validationMessage = nil
+        return .none
+
+      case .remoteRepositoryPromptURLChanged(let url):
+        state.remoteRepositoryPrompt?.url = url
+        state.remoteRepositoryPrompt?.validationMessage = nil
+        state.remoteRepositoryPrompt?.branchOptions = []
+        state.remoteRepositoryPrompt?.defaultBaseRef = nil
+        if state.remoteRepositoryPrompt?.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+          state.remoteRepositoryPrompt?.name = Self.remoteRepositoryName(for: url)
+        }
+        return .none
+
+      case .remoteRepositoryPromptNameChanged(let name):
+        state.remoteRepositoryPrompt?.name = name
+        state.remoteRepositoryPrompt?.validationMessage = nil
+        return .none
+
+      case .remoteRepositoryPromptLoadButtonTapped:
+        guard var prompt = state.remoteRepositoryPrompt else {
+          return .none
+        }
+        let url = prompt.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty else {
+          prompt.validationMessage = "Remote URL required."
+          state.remoteRepositoryPrompt = prompt
+          return .none
+        }
+        prompt.url = url
+        if prompt.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          prompt.name = Self.remoteRepositoryName(for: url)
+        }
+        prompt.isLoading = true
+        prompt.validationMessage = nil
+        state.remoteRepositoryPrompt = prompt
+        let gitClient = gitClient
+        return .run { send in
+          do {
+            let refs = try await gitClient.remoteBranchRefs(url)
+            await send(.remoteRepositoryPromptLoaded(url, refs))
+          } catch {
+            await send(.remoteRepositoryPromptFailed(error.localizedDescription))
+          }
+        }
+
+      case .remoteRepositoryPromptLoaded(let url, let refs):
+        guard var prompt = state.remoteRepositoryPrompt,
+          prompt.url.trimmingCharacters(in: .whitespacesAndNewlines) == url
+        else {
+          return .none
+        }
+        let options = ProjectWorkspaceCreationRepository.normalizedBaseRefOptions(refs.options)
+        prompt.isLoading = false
+        prompt.branchOptions = options
+        prompt.defaultBaseRef = ProjectWorkspaceCreationRepository.preferredBaseRef(
+          automaticBaseRef: refs.defaultBaseRef,
+          options: options
+        )
+        prompt.validationMessage = options.isEmpty ? "No remote branches found." : nil
+        state.remoteRepositoryPrompt = prompt
+        return .none
+
+      case .remoteRepositoryPromptFailed(let message):
+        state.remoteRepositoryPrompt?.isLoading = false
+        state.remoteRepositoryPrompt?.validationMessage = message
+        return .none
+
+      case .remoteRepositoryPromptAddButtonTapped:
+        guard let prompt = state.remoteRepositoryPrompt else {
+          return .none
+        }
+        let url = prompt.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty else {
+          state.remoteRepositoryPrompt?.validationMessage = "Remote URL required."
+          return .none
+        }
+        guard !prompt.branchOptions.isEmpty else {
+          state.remoteRepositoryPrompt?.validationMessage = "Load remote branches before adding."
+          return .none
+        }
+        let id = uuid().uuidString
+        state.repositories.append(
+          ProjectWorkspaceCreationRepository(
+            id: id,
+            name: prompt.displayName,
+            sourceKind: .remote,
+            sourceLocation: url,
+            checkoutMode: .useExistingRef,
+            baseRef: prompt.defaultBaseRef,
+            baseRefOptions: prompt.branchOptions
+          )
+        )
+        state.selectedRepositoryIDs.insert(id)
+        state.remoteRepositoryPrompt = nil
+        state.validationMessage = nil
+        return .none
+
+      case .remoteRepositoryPromptDismissed:
+        state.remoteRepositoryPrompt = nil
         return .none
 
       case .addRepositoryFromURL(let sourceKind, let path):
@@ -125,16 +254,24 @@ struct WorkspaceCreationPromptFeature {
         state.validationMessage = nil
         return .none
 
+      case .repositoryCheckoutModeChanged(let repositoryID, let checkoutMode):
+        guard var repository = state.repositories[id: repositoryID] else {
+          return .none
+        }
+        repository.checkoutMode = checkoutMode
+        state.repositories[id: repositoryID] = repository
+        state.validationMessage = nil
+        return .none
+
       case .repositorySourceKindChanged(let repositoryID, let sourceKind):
         guard var repository = state.repositories[id: repositoryID] else {
           return .none
         }
         repository.sourceKind = sourceKind
         repository.baseRef = nil
+        repository.baseRefOptions = []
         if sourceKind == .remote {
           repository.sourceLocation = ""
-        } else {
-          repository.baseRefOptions = []
         }
         state.repositories[id: repositoryID] = repository
         state.validationMessage = nil
@@ -187,7 +324,7 @@ struct WorkspaceCreationPromptFeature {
           return .none
         }
         let trimmed = baseRef.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty || repository.baseRefOptions.contains(trimmed) else {
+        guard trimmed.isEmpty || repository.baseRefOptions.contains(where: { $0.ref == trimmed }) else {
           return .none
         }
         repository.baseRef = trimmed.isEmpty ? nil : trimmed
@@ -227,6 +364,21 @@ struct WorkspaceCreationPromptFeature {
               ProjectWorkspaceCreationError.missingRepositorySource(displayName).localizedDescription
             return .none
           }
+          if repository.checkoutMode == .createBranch,
+            repository.sourceKind == .remote || repository.sourceKind == .bareRepository,
+            repository.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+          {
+            let displayName = name.isEmpty ? "repository" : name
+            state.validationMessage = "Branch name required for \(displayName)."
+            return .none
+          }
+          if repository.checkoutMode == .useExistingRef,
+            repository.baseRef?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+          {
+            let displayName = name.isEmpty ? "repository" : name
+            state.validationMessage = "Choose an existing branch for \(displayName)."
+            return .none
+          }
         }
         state.validationMessage = nil
         return .send(
@@ -253,5 +405,18 @@ struct WorkspaceCreationPromptFeature {
         return .none
       }
     }
+  }
+
+  private static func remoteRepositoryName(for remoteURL: String) -> String {
+    let trimmed = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+      .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    guard !trimmed.isEmpty else {
+      return ""
+    }
+    let separatorIndex = trimmed.lastIndex { $0 == "/" || $0 == ":" }
+    let component =
+      separatorIndex.map { String(trimmed[trimmed.index(after: $0)...]) }
+      ?? trimmed
+    return component.hasSuffix(".git") ? String(component.dropLast(4)) : component
   }
 }

@@ -62,7 +62,7 @@ struct WorkspaceCreationPromptView: View {
           .foregroundStyle(.secondary)
         HStack(spacing: 8) {
           Button {
-            store.send(.addBlankRepository(.remote))
+            store.send(.addRemoteButtonTapped)
           } label: {
             Label("Add Remote", systemImage: "network")
           }
@@ -133,6 +133,18 @@ struct WorkspaceCreationPromptView: View {
     .frame(minWidth: 680)
     .task {
       isTitleFieldFocused = true
+    }
+    .sheet(
+      isPresented: Binding(
+        get: { store.remoteRepositoryPrompt != nil },
+        set: { isPresented in
+          if !isPresented {
+            store.send(.remoteRepositoryPromptDismissed)
+          }
+        }
+      )
+    ) {
+      remoteRepositoryPromptView()
     }
   }
 
@@ -242,33 +254,123 @@ struct WorkspaceCreationPromptView: View {
 
   private func repositoryBranchFields(_ repository: ProjectWorkspaceCreationRepository) -> some View {
     HStack(spacing: 8) {
-      TextField(
-        "Branch",
-        text: Binding(
-          get: { repository.branchName ?? "" },
-          set: { store.send(.repositoryBranchNameChanged(repository.id, $0)) }
-        )
-      )
-      .textFieldStyle(.roundedBorder)
-      .disabled(store.isCreating)
-
       Picker(
-        "Base ref",
+        "Branch action",
         selection: Binding(
-          get: { repository.baseRef ?? "" },
-          set: { store.send(.repositoryBaseRefChanged(repository.id, $0)) }
+          get: { repository.checkoutMode },
+          set: { store.send(.repositoryCheckoutModeChanged(repository.id, $0)) }
         )
       ) {
-        Text("Base ref").tag("")
-        ForEach(repository.baseRefOptions, id: \.self) { option in
-          Text(option).tag(option)
-        }
+        Text("Create Branch").tag(ProjectWorkspaceRepositoryCheckoutMode.createBranch)
+        Text("Use Existing").tag(ProjectWorkspaceRepositoryCheckoutMode.useExistingRef)
       }
       .pickerStyle(.menu)
       .labelsHidden()
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .help("Choose Base Ref")
+      .frame(width: 150)
+      .help("Choose Branch Action")
+      .disabled(store.isCreating)
+
+      if repository.checkoutMode == .createBranch {
+        TextField(
+          "Branch",
+          text: Binding(
+            get: { repository.branchName ?? "" },
+            set: { store.send(.repositoryBranchNameChanged(repository.id, $0)) }
+          )
+        )
+        .textFieldStyle(.roundedBorder)
+        .disabled(store.isCreating)
+      }
+
+      WorkspaceBranchRefPickerView(
+        title: repository.checkoutMode == .createBranch ? "Base ref" : "Existing branch",
+        selection: repository.baseRef,
+        options: repository.baseRefOptions,
+        isDisabled: store.isCreating || repository.baseRefOptions.isEmpty
+      ) { ref in
+        store.send(.repositoryBaseRefChanged(repository.id, ref))
+      }
       .disabled(store.isCreating || repository.baseRefOptions.isEmpty)
+    }
+  }
+
+  @ViewBuilder
+  private func remoteRepositoryPromptView() -> some View {
+    if let prompt = store.remoteRepositoryPrompt {
+      VStack(alignment: .leading, spacing: 16) {
+        Text("Add Remote Repository")
+          .font(.title3)
+
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Remote URL")
+            .foregroundStyle(.secondary)
+          TextField(
+            "git@github.com:owner/repo.git",
+            text: Binding(
+              get: { prompt.url },
+              set: { store.send(.remoteRepositoryPromptURLChanged($0)) }
+            )
+          )
+          .textFieldStyle(.roundedBorder)
+          .font(.body.monospaced())
+          .disabled(prompt.isLoading)
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Name")
+            .foregroundStyle(.secondary)
+          TextField(
+            "Repository name",
+            text: Binding(
+              get: { prompt.name },
+              set: { store.send(.remoteRepositoryPromptNameChanged($0)) }
+            )
+          )
+          .textFieldStyle(.roundedBorder)
+          .disabled(prompt.isLoading)
+        }
+
+        if !prompt.branchOptions.isEmpty {
+          Text("\(prompt.branchOptions.count) remote branches loaded")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+
+        if let message = prompt.validationMessage, !message.isEmpty {
+          Text(message)
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+
+        HStack {
+          if prompt.isLoading {
+            ProgressView()
+              .controlSize(.small)
+          }
+          Spacer()
+          Button("Cancel") {
+            store.send(.remoteRepositoryPromptDismissed)
+          }
+          .keyboardShortcut(.cancelAction)
+          .help("Cancel (Esc)")
+          .disabled(prompt.isLoading)
+
+          Button("Load") {
+            store.send(.remoteRepositoryPromptLoadButtonTapped)
+          }
+          .help("Load Remote Branches")
+          .disabled(prompt.isLoading || prompt.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+          Button("Add") {
+            store.send(.remoteRepositoryPromptAddButtonTapped)
+          }
+          .keyboardShortcut(.defaultAction)
+          .help("Add Remote Repository")
+          .disabled(prompt.isLoading || prompt.branchOptions.isEmpty)
+        }
+      }
+      .padding(20)
+      .frame(width: 520)
     }
   }
 
@@ -346,6 +448,105 @@ struct WorkspaceCreationPromptView: View {
       return "Remote URL"
     case .bareRepository:
       return "Bare repository folder"
+    }
+  }
+}
+
+private struct WorkspaceBranchRefPickerView: View {
+  let title: String
+  let selection: String?
+  let options: [GitBranchRefOption]
+  let isDisabled: Bool
+  let onSelect: (String) -> Void
+
+  @State private var isPresented = false
+  @State private var searchText = ""
+
+  var body: some View {
+    Button {
+      isPresented = true
+    } label: {
+      HStack {
+        Text(displayTitle)
+          .lineLimit(1)
+          .truncationMode(.middle)
+        Spacer(minLength: 8)
+        Image(systemName: "chevron.down")
+          .imageScale(.small)
+          .accessibilityHidden(true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .buttonStyle(.bordered)
+    .help("Choose \(title)")
+    .disabled(isDisabled)
+    .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+      VStack(alignment: .leading, spacing: 10) {
+        TextField("Search branches", text: $searchText)
+          .textFieldStyle(.roundedBorder)
+
+        ScrollView {
+          VStack(alignment: .leading, spacing: 10) {
+            ForEach(groupedOptions, id: \.kind) { group in
+              VStack(alignment: .leading, spacing: 4) {
+                Text(group.kind.title)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                ForEach(group.options) { option in
+                  Button {
+                    onSelect(option.ref)
+                    isPresented = false
+                    searchText = ""
+                  } label: {
+                    HStack {
+                      if option.ref == selection {
+                        Image(systemName: "checkmark")
+                          .frame(width: 14)
+                          .accessibilityHidden(true)
+                      } else {
+                        Color.clear
+                          .frame(width: 14, height: 1)
+                      }
+                      Text(option.ref)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                      Spacer()
+                    }
+                  }
+                  .buttonStyle(.plain)
+                  .padding(.vertical, 3)
+                }
+              }
+            }
+            if groupedOptions.isEmpty {
+              Text("No matching branches")
+                .foregroundStyle(.secondary)
+            }
+          }
+        }
+        .frame(maxHeight: 260)
+      }
+      .padding(14)
+      .frame(width: 420)
+    }
+  }
+
+  private var displayTitle: String {
+    guard let selection, !selection.isEmpty else {
+      return title
+    }
+    return selection
+  }
+
+  private var groupedOptions: [(kind: GitBranchRefKind, options: [GitBranchRefOption])] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let filtered =
+      query.isEmpty
+      ? options
+      : options.filter { $0.ref.localizedCaseInsensitiveContains(query) }
+    return GitBranchRefKind.allCases.compactMap { kind in
+      let group = filtered.filter { $0.kind == kind }
+      return group.isEmpty ? nil : (kind, group)
     }
   }
 }

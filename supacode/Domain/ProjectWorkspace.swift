@@ -7,24 +7,31 @@ nonisolated enum ProjectWorkspaceRepositorySourceKind: String, Codable, Equatabl
   case existingPath = "existing_path"
 }
 
+nonisolated enum ProjectWorkspaceRepositoryCheckoutMode: String, Codable, Equatable, Hashable, Sendable {
+  case createBranch = "create_branch"
+  case useExistingRef = "use_existing_ref"
+}
+
 nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Sendable, Identifiable {
   var id: String
   var name: String
   var path: String?
   var sourceKind: ProjectWorkspaceRepositorySourceKind
   var sourceLocation: String
+  var checkoutMode: ProjectWorkspaceRepositoryCheckoutMode
   var branchName: String?
   var baseRef: String?
-  var baseRefOptions: [String]
+  var baseRefOptions: [GitBranchRefOption]
 
   init(
     id: String,
     name: String,
     rootURL: URL,
+    checkoutMode: ProjectWorkspaceRepositoryCheckoutMode = .createBranch,
     branchName: String? = nil,
     path: String? = nil,
     baseRef: String? = nil,
-    baseRefOptions: [String] = []
+    baseRefOptions: [GitBranchRefOption] = []
   ) {
     let normalizedURL = rootURL.standardizedFileURL
     self.id = id
@@ -32,6 +39,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     self.path = path
     sourceKind = .existingPath
     sourceLocation = normalizedURL.path(percentEncoded: false)
+    self.checkoutMode = checkoutMode
     self.branchName = branchName
     self.baseRef = baseRef
     self.baseRefOptions = Self.normalizedBaseRefOptions(baseRefOptions)
@@ -42,16 +50,18 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     name: String,
     sourceKind: ProjectWorkspaceRepositorySourceKind,
     sourceLocation: String,
+    checkoutMode: ProjectWorkspaceRepositoryCheckoutMode = .createBranch,
     branchName: String? = nil,
     baseRef: String? = nil,
     path: String? = nil,
-    baseRefOptions: [String] = []
+    baseRefOptions: [GitBranchRefOption] = []
   ) {
     self.id = id
     self.name = name
     self.path = path
     self.sourceKind = sourceKind
     self.sourceLocation = sourceLocation
+    self.checkoutMode = checkoutMode
     self.branchName = branchName
     self.baseRef = baseRef
     self.baseRefOptions = Self.normalizedBaseRefOptions(baseRefOptions)
@@ -72,35 +82,39 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
 
   nonisolated static func baseRefOptions(
     automaticBaseRef: String?,
-    refs: [String]
-  ) -> [String] {
-    var values: [String] = []
+    options: [GitBranchRefOption]
+  ) -> [GitBranchRefOption] {
+    var values: [GitBranchRefOption] = []
     if let automaticBaseRef {
-      values.append(automaticBaseRef)
+      let trimmed = automaticBaseRef.trimmingCharacters(in: .whitespacesAndNewlines)
+      let kind = options.first { $0.ref == trimmed }?.kind ?? .local
+      values.append(GitBranchRefOption(ref: automaticBaseRef, kind: kind))
     }
-    values += refs
+    values += options
     return normalizedBaseRefOptions(values)
   }
 
-  nonisolated static func preferredBaseRef(automaticBaseRef: String?, options: [String]) -> String? {
+  nonisolated static func preferredBaseRef(automaticBaseRef: String?, options: [GitBranchRefOption]) -> String? {
+    let refs = Set(options.map(\.ref))
     if let automaticBaseRef,
-      !automaticBaseRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      !automaticBaseRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      refs.contains(automaticBaseRef)
     {
       return automaticBaseRef
     }
-    return ["main", "master", "origin/main", "origin/master"].first { options.contains($0) }
-      ?? options.first
+    return ["main", "master", "origin/main", "origin/master"].first { refs.contains($0) }
+      ?? options.first?.ref
   }
 
-  nonisolated static func normalizedBaseRefOptions(_ values: [String]) -> [String] {
+  nonisolated static func normalizedBaseRefOptions(_ values: [GitBranchRefOption]) -> [GitBranchRefOption] {
     var seen = Set<String>()
-    var result: [String] = []
+    var result: [GitBranchRefOption] = []
     for value in values {
-      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      let trimmed = value.ref.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty, seen.insert(trimmed).inserted else {
         continue
       }
-      result.append(trimmed)
+      result.append(GitBranchRefOption(ref: trimmed, kind: value.kind))
     }
     return result
   }
@@ -534,7 +548,9 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
         path: workspacePath,
         sourceKind: sourceKind,
         sourceLocation: normalizedSourceLocation,
-        branchName: repository.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+        branchName: repository.checkoutMode == .createBranch
+          ? repository.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+          : nil,
         baseRef: repository.baseRef?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
       ),
       createdURL: destinationURL,
@@ -550,6 +566,18 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     let destinationPath = normalizedPath(destinationURL, resolvingSymlinks: false)
     let branchName = repository.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     let baseRef = repository.baseRef?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    if repository.checkoutMode == .useExistingRef {
+      guard let baseRef else {
+        return
+      }
+      try await gitRunner.run(
+        ProjectWorkspaceGitCommand(
+          arguments: ["-C", destinationPath, "checkout", remoteCloneExistingCheckoutRef(baseRef)],
+          currentDirectoryURL: nil
+        )
+      )
+      return
+    }
     switch (branchName, baseRef) {
     case (.some(let branchName), .some(let baseRef)):
       try await gitRunner.run(
@@ -585,7 +613,13 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     let branchName = repository.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     let baseRef = repository.baseRef?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     var arguments = ["-C", sourcePath, "worktree", "add"]
-    if let branchName, let baseRef {
+    if repository.checkoutMode == .useExistingRef {
+      if let baseRef {
+        arguments += [destinationPath, baseRef]
+      } else {
+        arguments += [destinationPath]
+      }
+    } else if let branchName, let baseRef {
       arguments += ["-b", branchName, destinationPath, baseRef]
     } else if let branchName {
       arguments += [destinationPath, branchName]
@@ -595,6 +629,14 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       arguments += [destinationPath]
     }
     return ProjectWorkspaceGitCommand(arguments: arguments, currentDirectoryURL: nil)
+  }
+
+  private static func remoteCloneExistingCheckoutRef(_ baseRef: String) -> String {
+    let prefix = "origin/"
+    guard baseRef.hasPrefix(prefix), baseRef.count > prefix.count else {
+      return baseRef
+    }
+    return String(baseRef.dropFirst(prefix.count))
   }
 
   private static func localRepositoryPath(
