@@ -572,44 +572,83 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
-  @Test func workspaceCreationPromptOpensWithoutTwoRepositories() async {
+  @Test func workspaceCreationPromptOffersOpenedRepositoriesWithoutAddingThem() async {
     let repository = makeRepository(id: "/tmp/repo-a", name: "Repo A", worktrees: [])
     let store = TestStore(initialState: makeState(repositories: [repository])) {
       RepositoriesFeature()
-    } withDependencies: {
-      $0.gitClient.repoRoot = { url in url }
-      $0.gitClient.automaticWorktreeBaseRef = { _ in "master" }
-      $0.gitClient.branchRefOptions = { _ in [GitBranchRefOption(ref: "master", kind: .local)] }
     }
 
     await store.send(.workspaceCreation(.promptRequested)) {
-      let title = "Repo A"
+      let title = "Workspace"
       let expectedRootPath = SupacodePaths.workspacesDirectory
         .appending(path: ProjectWorkspace.defaultWorkspaceFolderName(for: title), directoryHint: .isDirectory)
         .standardizedFileURL
         .path(percentEncoded: false)
       $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
-        repositories: [
+        repositories: [],
+        title: title,
+        rootPath: expectedRootPath,
+        selectedRepositoryIDs: [],
+        openedRepositoryCandidates: [
           ProjectWorkspaceCreationRepository(
             id: "/tmp/repo-a",
             name: "Repo A",
             rootURL: URL(fileURLWithPath: "/tmp/repo-a")
           )
-        ],
-        title: title,
-        rootPath: expectedRootPath,
-        selectedRepositoryIDs: ["/tmp/repo-a"]
+        ]
       )
-    }
-    await store.receive(\.workspaceCreation.baseRefsLoaded) {
-      $0.workspaceCreationPrompt?.repositories[id: "/tmp/repo-a"]?.baseRef = "master"
-      $0.workspaceCreationPrompt?.repositories[id: "/tmp/repo-a"]?.baseRefOptions = [
-        GitBranchRefOption(ref: "master", kind: .local)
-      ]
     }
   }
 
-  @Test func workspaceCreationPromptUsesLoadedRepositories() async {
+  @Test func workspaceCreationPromptAddsOpenedRepositoryOnRequest() async {
+    let repoRootA = "/tmp/repo-a"
+    let candidate = ProjectWorkspaceCreationRepository(
+      id: repoRootA,
+      name: "Repo A",
+      rootURL: URL(fileURLWithPath: repoRootA)
+    )
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [],
+        title: "Workspace",
+        rootPath: "/tmp/workspace",
+        selectedRepositoryIDs: [],
+        openedRepositoryCandidates: [candidate]
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.addOpenedRepository(repoRootA)) {
+      $0.repositories = [candidate]
+      $0.selectedRepositoryIDs = [repoRootA]
+    }
+    await store.receive(.delegate(.baseRefSourceChanged(repoRootA)))
+  }
+
+  @Test func workspaceCreationPromptIgnoresDuplicateOpenedRepository() async {
+    let repoRootA = "/tmp/repo-a"
+    let candidate = ProjectWorkspaceCreationRepository(
+      id: repoRootA,
+      name: "Repo A",
+      rootURL: URL(fileURLWithPath: repoRootA)
+    )
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [candidate],
+        title: "Workspace",
+        rootPath: "/tmp/workspace",
+        selectedRepositoryIDs: [repoRootA],
+        openedRepositoryCandidates: [candidate]
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.addOpenedRepository(repoRootA))
+  }
+
+  @Test func workspaceCreationPromptOffersLoadedRepositories() async {
     let testID = UUID().uuidString
     let repoRootA = "/tmp/\(testID)-repo-a"
     let repoRootB = "/tmp/\(testID)-repo-b"
@@ -618,11 +657,47 @@ struct RepositoriesFeatureTests {
     let repoB = makeRepository(id: repoRootB, name: "Repo B", worktrees: [])
     var state = makeState(repositories: [repoA, repoB])
     state.repositoryCustomTitles[repoB.id] = "API"
-    let title = "Repo A + API"
-    let expectedRootPath = SupacodePaths.workspacesDirectory
-      .appending(path: ProjectWorkspace.defaultWorkspaceFolderName(for: title), directoryHint: .isDirectory)
-      .standardizedFileURL
-      .path(percentEncoded: false)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.workspaceCreation(.promptRequested)) {
+      let title = "Workspace"
+      let expectedRootPath = SupacodePaths.workspacesDirectory
+        .appending(path: ProjectWorkspace.defaultWorkspaceFolderName(for: title), directoryHint: .isDirectory)
+        .standardizedFileURL
+        .path(percentEncoded: false)
+      $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+        repositories: [],
+        title: title,
+        rootPath: expectedRootPath,
+        selectedRepositoryIDs: [],
+        openedRepositoryCandidates: [
+          ProjectWorkspaceCreationRepository(
+            id: repoRootA,
+            name: "Repo A",
+            rootURL: URL(fileURLWithPath: repoRootA),
+            branchName: "main"
+          ),
+          ProjectWorkspaceCreationRepository(
+            id: repoRootB,
+            name: "API",
+            rootURL: URL(fileURLWithPath: repoRootB)
+          ),
+        ]
+      )
+    }
+  }
+
+  @Test func workspaceCreationPromptLoadsBaseRefsForAddedOpenedRepository() async {
+    let testID = UUID().uuidString
+    let repoRootA = "/tmp/\(testID)-repo-a"
+    let repoRootB = "/tmp/\(testID)-repo-b"
+    let worktreeA = makeWorktree(id: repoRootA, name: "main", repoRoot: repoRootA)
+    let repoA = makeRepository(id: repoRootA, name: "Repo A", worktrees: [worktreeA])
+    let repoB = makeRepository(id: repoRootB, name: "Repo B", worktrees: [])
+    var state = makeState(repositories: [repoA, repoB])
+    state.repositoryCustomTitles[repoB.id] = "API"
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -644,8 +719,17 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.workspaceCreation(.promptRequested)) {
+      let title = "Workspace"
+      let expectedRootPath = SupacodePaths.workspacesDirectory
+        .appending(path: ProjectWorkspace.defaultWorkspaceFolderName(for: title), directoryHint: .isDirectory)
+        .standardizedFileURL
+        .path(percentEncoded: false)
       $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
-        repositories: [
+        repositories: [],
+        title: title,
+        rootPath: expectedRootPath,
+        selectedRepositoryIDs: [],
+        openedRepositoryCandidates: [
           ProjectWorkspaceCreationRepository(
             id: repoRootA,
             name: "Repo A",
@@ -657,24 +741,26 @@ struct RepositoriesFeatureTests {
             name: "API",
             rootURL: URL(fileURLWithPath: repoRootB)
           ),
-        ],
-        title: title,
-        rootPath: expectedRootPath,
-        selectedRepositoryIDs: [repoRootA, repoRootB]
+        ]
       )
     }
+    await store.send(.workspaceCreationPrompt(.presented(.addOpenedRepository(repoRootA)))) {
+      $0.workspaceCreationPrompt?.repositories.append(
+        ProjectWorkspaceCreationRepository(
+          id: repoRootA,
+          name: "Repo A",
+          rootURL: URL(fileURLWithPath: repoRootA),
+          branchName: "main"
+        )
+      )
+      $0.workspaceCreationPrompt?.selectedRepositoryIDs = [repoRootA]
+    }
+    await store.receive(\.workspaceCreation.refreshBaseRefs)
     await store.receive(\.workspaceCreation.baseRefsLoaded) {
       $0.workspaceCreationPrompt?.repositories[id: repoRootA]?.baseRef = "main"
       $0.workspaceCreationPrompt?.repositories[id: repoRootA]?.baseRefOptions = [
         GitBranchRefOption(ref: "main", kind: .local),
         GitBranchRefOption(ref: "origin/main", kind: .remoteTracking),
-      ]
-    }
-    await store.receive(\.workspaceCreation.baseRefsLoaded) {
-      $0.workspaceCreationPrompt?.repositories[id: repoRootB]?.baseRef = "master"
-      $0.workspaceCreationPrompt?.repositories[id: repoRootB]?.baseRefOptions = [
-        GitBranchRefOption(ref: "master", kind: .local),
-        GitBranchRefOption(ref: "origin/master", kind: .remoteTracking),
       ]
     }
   }

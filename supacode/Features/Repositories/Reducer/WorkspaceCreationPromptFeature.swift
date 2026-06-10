@@ -7,6 +7,7 @@ struct WorkspaceCreationPromptFeature {
   @ObservableState
   struct State: Equatable {
     var repositories: IdentifiedArrayOf<ProjectWorkspaceCreationRepository>
+    var openedRepositoryCandidates: IdentifiedArrayOf<ProjectWorkspaceCreationRepository>
     var title: String
     var rootPath: String
     var selectedRepositoryIDs: Set<Repository.ID>
@@ -15,11 +16,15 @@ struct WorkspaceCreationPromptFeature {
     var remoteRepositoryPrompt: RemoteRepositoryPromptState?
 
     var selectedRepositoryCount: Int {
-      repositories.count { selectedRepositoryIDs.contains($0.id) }
+      repositories.count
     }
 
     var selectedRepositories: [ProjectWorkspaceCreationRepository] {
-      repositories.filter { selectedRepositoryIDs.contains($0.id) }
+      Array(repositories)
+    }
+
+    var availableOpenedRepositories: [ProjectWorkspaceCreationRepository] {
+      openedRepositoryCandidates.filter { repositories[id: $0.id] == nil }
     }
 
     var rootPathPreview: String {
@@ -30,9 +35,14 @@ struct WorkspaceCreationPromptFeature {
       repositories: [ProjectWorkspaceCreationRepository],
       title: String,
       rootPath: String,
-      selectedRepositoryIDs: Set<Repository.ID>
+      selectedRepositoryIDs: Set<Repository.ID>,
+      openedRepositoryCandidates: [ProjectWorkspaceCreationRepository] = []
     ) {
       self.repositories = IdentifiedArray(repositories, uniquingIDsWith: { current, _ in current })
+      self.openedRepositoryCandidates = IdentifiedArray(
+        openedRepositoryCandidates,
+        uniquingIDsWith: { current, _ in current }
+      )
       self.title = title
       self.rootPath = rootPath
       self.selectedRepositoryIDs = selectedRepositoryIDs
@@ -57,6 +67,7 @@ struct WorkspaceCreationPromptFeature {
   enum Action: BindableAction, Equatable {
     case binding(BindingAction<State>)
     case addBlankRepository(ProjectWorkspaceRepositorySourceKind)
+    case addOpenedRepository(Repository.ID)
     case addRepositoryFromURL(ProjectWorkspaceRepositorySourceKind, String)
     case addRemoteButtonTapped
     case remoteRepositoryPromptURLChanged(String)
@@ -115,6 +126,17 @@ struct WorkspaceCreationPromptFeature {
         state.selectedRepositoryIDs.insert(id)
         state.validationMessage = nil
         return .none
+
+      case .addOpenedRepository(let repositoryID):
+        guard let repository = state.openedRepositoryCandidates[id: repositoryID],
+          state.repositories[id: repositoryID] == nil
+        else {
+          return .none
+        }
+        state.repositories.append(repository)
+        state.selectedRepositoryIDs.insert(repositoryID)
+        state.validationMessage = nil
+        return .send(.delegate(.baseRefSourceChanged(repositoryID)))
 
       case .addRemoteButtonTapped:
         state.remoteRepositoryPrompt = RemoteRepositoryPromptState()

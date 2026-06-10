@@ -144,7 +144,7 @@ struct GitClient {
         "-C",
         path,
         "for-each-ref",
-        "--format=%(refname:short)",
+        "--format=%(refname)",
         "refs/heads",
       ]
     )
@@ -154,15 +154,14 @@ struct GitClient {
         "-C",
         path,
         "for-each-ref",
-        "--format=%(refname:short)",
+        "--format=%(refname)",
         "refs/remotes",
       ]
     )
-    let localRefs = parseRefLines(localOutput)
+    let localRefs = parseRefLines(localOutput, prefix: "refs/heads/")
       .filter { !$0.hasSuffix("/HEAD") }
       .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    let remoteRefs = parseRefLines(remoteOutput)
-      .filter { !$0.hasSuffix("/HEAD") }
+    let remoteRefs = parseRefLines(remoteOutput, prefix: "refs/remotes/")
       .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     return deduplicatedOptions(
       localRefs.map { GitBranchRefOption(ref: $0, kind: .local) }
@@ -692,12 +691,15 @@ struct GitClient {
       .last { !$0.isEmpty }
   }
 
-  nonisolated private func parseRefLines(_ output: String) -> [String] {
+  nonisolated private func parseRefLines(_ output: String, prefix: String) -> [String] {
     output
       .split(whereSeparator: \.isNewline)
       .compactMap { line -> String? in
         let ref = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
-        return ref.isEmpty ? nil : ref
+        guard !ref.isEmpty else {
+          return nil
+        }
+        return ref.hasPrefix(prefix) ? String(ref.dropFirst(prefix.count)) : ref
       }
   }
 

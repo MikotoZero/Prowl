@@ -30,14 +30,15 @@ extension RepositoriesFeature {
     switch action {
     case .promptRequested:
       let candidates = state.workspaceCreationCandidates
-      let title = workspaceCreationDefaultTitle(candidates: candidates)
+      let title = "Workspace"
       state.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
-        repositories: candidates,
+        repositories: [],
         title: title,
         rootPath: defaultWorkspaceRootURL(title: title).path(percentEncoded: false),
-        selectedRepositoryIDs: Set(candidates.map(\.id))
+        selectedRepositoryIDs: [],
+        openedRepositoryCandidates: candidates
       )
-      return workspaceBaseRefsEffect(for: candidates)
+      return .none
 
     case .promptCanceled, .promptDismissed:
       state.workspaceCreationPrompt = nil
@@ -124,20 +125,6 @@ extension RepositoriesFeature {
       }
       return reduceWorkspaceCreation(state: &state, action: action)
     }
-  }
-
-  private func workspaceCreationDefaultTitle(candidates: [ProjectWorkspaceCreationRepository]) -> String {
-    let names = candidates.map(\.name).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    if names.isEmpty {
-      return "Workspace"
-    }
-    if names.count <= 3 {
-      return names.joined(separator: " + ")
-    }
-    guard let first = names.first else {
-      return "Workspace"
-    }
-    return "\(first) + \(names.count - 1) repos"
   }
 
   private func defaultWorkspaceRootURL(title: String) -> URL {

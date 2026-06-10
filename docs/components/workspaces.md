@@ -34,8 +34,8 @@ my-feature-workspace/
 
 Repository sources can be mixed in one workspace:
 
-- Already opened repositories are added as symlinks with `source_kind:
-  existing_path`.
+- Already opened repositories can be inserted from the **Add Opened** menu. They
+  are added as symlinks with `source_kind: existing_path`.
 - Local repository folders selected from disk are added as symlinks with
   `source_kind: local_repository`.
 - Remote repositories are added through a URL prompt that loads remote heads
@@ -50,7 +50,8 @@ The creation prompt detects base-ref candidates for already opened, local, and
 bare repositories by reading local git refs, preferring the detected default
 branch such as `main` or `master`. Refs are grouped as local branches, remote
 tracking branches, or fetched remote branches, and the picker supports simple
-text search. Base refs are selected from detected refs so workspace creation
+text search. Remote default-branch pointers are shown explicitly, such as
+`origin/HEAD`. Base refs are selected from detected refs so workspace creation
 does not try to checkout an arbitrary, nonexistent branch.
 
 Branch behavior is explicit:
@@ -59,7 +60,11 @@ Branch behavior is explicit:
   new branch or worktree branch. Remote and bare sources require a branch name
   in this mode.
 - **Use Existing** uses the selected ref directly. For remote clones, Prowl
-  checks out the selected remote branch after clone.
+  checks out the selected remote branch after clone; Git creates the normal
+  local tracking branch for refs such as `origin/feature`. For bare
+  repositories, Prowl passes the selected ref to `git worktree add`, so local
+  branch refs produce branch worktrees and remote-tracking refs produce detached
+  worktrees.
 
 ## Metadata
 

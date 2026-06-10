@@ -17,7 +17,7 @@ struct WorkspaceCreationPromptView: View {
       VStack(alignment: .leading, spacing: 4) {
         Text("New Workspace")
           .font(.title3)
-        Text("\(store.selectedRepositoryCount) of \(store.repositories.count) repositories selected")
+        Text(repositoryCountText)
           .foregroundStyle(.secondary)
       }
 
@@ -61,6 +61,20 @@ struct WorkspaceCreationPromptView: View {
         Text("Repositories")
           .foregroundStyle(.secondary)
         HStack(spacing: 8) {
+          Menu {
+            ForEach(store.availableOpenedRepositories) { repository in
+              Button {
+                store.send(.addOpenedRepository(repository.id))
+              } label: {
+                Text(repository.name.isEmpty ? repository.sourceLocation : repository.name)
+              }
+            }
+          } label: {
+            Label("Add Opened", systemImage: "folder.badge.plus")
+          }
+          .help("Add Opened Path")
+          .disabled(store.isCreating || store.availableOpenedRepositories.isEmpty)
+
           Button {
             store.send(.addRemoteButtonTapped)
           } label: {
@@ -148,6 +162,10 @@ struct WorkspaceCreationPromptView: View {
     }
   }
 
+  private var repositoryCountText: String {
+    store.repositories.count == 1 ? "1 repository" : "\(store.repositories.count) repositories"
+  }
+
   private func repositoryEditor(_ repository: ProjectWorkspaceCreationRepository) -> some View {
     VStack(alignment: .leading, spacing: 10) {
       repositoryHeader(repository)
@@ -161,16 +179,9 @@ struct WorkspaceCreationPromptView: View {
 
   private func repositoryHeader(_ repository: ProjectWorkspaceCreationRepository) -> some View {
     HStack(spacing: 10) {
-      Toggle(
-        isOn: Binding(
-          get: { store.selectedRepositoryIDs.contains(repository.id) },
-          set: { store.send(.repositorySelectionChanged(repository.id, $0)) }
-        )
-      ) {
-        Text(repository.name.isEmpty ? "Repository" : repository.name)
-          .fontWeight(.medium)
-      }
-      .toggleStyle(.checkbox)
+      Text(repository.name.isEmpty ? "Repository" : repository.name)
+        .fontWeight(.medium)
+        .lineLimit(1)
 
       Picker(
         "Source",
