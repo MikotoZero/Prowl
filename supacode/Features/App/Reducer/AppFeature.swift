@@ -118,6 +118,11 @@ struct AppFeature {
     case .selectArchivedWorktrees, .selectCanvas, .selectShelf, .selectTabbed, .setTopSegment, .toggleCanvas,
       .toggleShelf:
       return true
+    // `isShowingShelf` also requires a non-empty repository list, so actions
+    // that add or remove repositories can flip it without touching `isShelfActive`.
+    case .repositoriesLoaded, .repositoryManagement(.repositoryRemoved),
+      .repositoryManagement(.openRepositoriesFinished):
+      return true
     default:
       return false
     }

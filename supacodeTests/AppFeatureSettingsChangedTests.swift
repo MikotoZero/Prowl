@@ -151,6 +151,25 @@ struct AppFeatureSettingsChangedTests {
     #expect(sentTerminalCommands.value == [.setAgentDetectionEnabled(false)])
   }
 
+  @Test func repositoryListChangesTriggerShelfVisibilityResync() {
+    // `isShowingShelf` requires a non-empty repository list, so adding or
+    // removing repositories must resync detection even though `isShelfActive`
+    // is untouched.
+    #expect(
+      AppFeature.repositoriesActionMayChangeShelfVisibility(
+        .repositoryManagement(.repositoryRemoved("/tmp/repo", selectionWasRemoved: false))
+      )
+    )
+    #expect(
+      AppFeature.repositoriesActionMayChangeShelfVisibility(
+        .repositoriesLoaded([], failures: [], roots: [], animated: false)
+      )
+    )
+    #expect(
+      !AppFeature.repositoriesActionMayChangeShelfVisibility(.selectNextShelfBook)
+    )
+  }
+
   @Test func appStateInitializesActiveAgentTabTitleDisplayFromSettings() {
     var settings = SettingsFeature.State()
     settings.showActiveAgentTabTitles = true
