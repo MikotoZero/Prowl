@@ -126,6 +126,31 @@ struct AppFeatureSettingsChangedTests {
     #expect(sentTerminalCommands.value == [.setAgentDetectionEnabled(true)])
   }
 
+  @Test(.dependencies) func syncAgentDetectionDisablesShelfOnlyDetectionWhenShelfStatusOptedOut() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = false
+    settings.showActiveAgentStatusInShelf = false
+    var state = AppFeature.State(settings: settings)
+    state.repositories.repositories = [repository]
+    state.repositories.isShelfActive = true
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = true }
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.syncAgentDetectionEnabled)
+    await store.finish()
+
+    #expect(sentTerminalCommands.value == [.setAgentDetectionEnabled(false)])
+  }
+
   @Test func appStateInitializesActiveAgentTabTitleDisplayFromSettings() {
     var settings = SettingsFeature.State()
     settings.showActiveAgentTabTitles = true

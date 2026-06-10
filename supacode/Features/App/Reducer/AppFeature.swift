@@ -101,12 +101,15 @@ struct AppFeature {
 
   func agentDetectionEnabled(
     state: State,
-    autoShowPanel: Bool? = nil
+    autoShowPanel: Bool? = nil,
+    showShelfStatus: Bool? = nil
   ) -> Bool {
-    ActiveAgentsFeature.detectionEnabled(
+    let shelfStatusVisible =
+      state.repositories.isShowingShelf && (showShelfStatus ?? state.settings.showActiveAgentStatusInShelf)
+    return ActiveAgentsFeature.detectionEnabled(
       isPanelHidden: state.repositories.activeAgents.isPanelHidden,
       autoShowPanel: autoShowPanel ?? state.settings.autoShowActiveAgentsPanel,
-      isShelfVisible: state.repositories.isShowingShelf
+      isShelfVisible: shelfStatusVisible
     )
   }
 
@@ -402,7 +405,10 @@ struct AppFeature {
         state.settings.keybindingUserOverrides = settings.keybindingUserOverrides
         state.repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
         let agentDetectionEnabled = agentDetectionEnabled(
-          state: state, autoShowPanel: settings.autoShowActiveAgentsPanel)
+          state: state,
+          autoShowPanel: settings.autoShowActiveAgentsPanel,
+          showShelfStatus: settings.showActiveAgentStatusInShelf
+        )
         if let selectedWorktree = state.repositories.selectedTerminalWorktree {
           let rootURL = selectedWorktree.repositoryRootURL
           @Shared(.repositorySettings(rootURL)) var repositorySettings
@@ -913,7 +919,7 @@ struct AppFeature {
         let agentDetectionEnabled = ActiveAgentsFeature.detectionEnabled(
           isPanelHidden: nextIsPanelHidden,
           autoShowPanel: state.settings.autoShowActiveAgentsPanel,
-          isShelfVisible: state.repositories.isShowingShelf
+          isShelfVisible: state.repositories.isShowingShelf && state.settings.showActiveAgentStatusInShelf
         )
         return .run { _ in
           await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))

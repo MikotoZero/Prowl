@@ -413,6 +413,24 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.showActiveAgentTabTitles == true)
   }
 
+  @Test(.dependencies) func showActiveAgentStatusInShelfPersistsChanges() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.showActiveAgentStatusInShelf = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.showActiveAgentStatusInShelf, false))) {
+      $0.showActiveAgentStatusInShelf = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.showActiveAgentStatusInShelf == false)
+  }
+
   @Test(.dependencies) func disablingAnalyticsResetsClient() async {
     var initialSettings = GlobalSettings.default
     initialSettings.analyticsEnabled = true

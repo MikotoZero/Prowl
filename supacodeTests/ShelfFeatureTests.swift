@@ -470,6 +470,27 @@ struct ShelfFeatureTests {
     #expect(sentCommands.value == [.performBindingAction(wt1, action: "previous_tab")])
   }
 
+  @Test func shelfSwipeGestureClassifierMapsAxesToShelfNavigation() {
+    #expect(
+      ShelfSwipeGestureClassifier.action(accumulatedDeltaX: -90, accumulatedDeltaY: 10) == .nextBook
+    )
+    #expect(
+      ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 90, accumulatedDeltaY: 10) == .previousBook
+    )
+    #expect(
+      ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 10, accumulatedDeltaY: -90) == .nextTab
+    )
+    #expect(
+      ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 10, accumulatedDeltaY: 90) == .previousTab
+    )
+  }
+
+  @Test func shelfSwipeGestureClassifierIgnoresSmallOrAmbiguousScrolls() {
+    #expect(ShelfSwipeGestureClassifier.action(accumulatedDeltaX: -79, accumulatedDeltaY: 0) == nil)
+    #expect(ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 60, accumulatedDeltaY: 60) == nil)
+    #expect(ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 90, accumulatedDeltaY: 70) == nil)
+  }
+
   @Test(.dependencies) func worktreeHistoryIsUnavailableWhileShelfIsActive() async {
     let fixture = threeWorktreeFixture()
     var state = RepositoriesFeature.State(repositories: [fixture.repo])

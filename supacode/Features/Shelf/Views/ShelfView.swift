@@ -43,9 +43,10 @@ struct ShelfView: View {
     let openIndex = openBook.flatMap { book in
       books.firstIndex(where: { $0.id == book.id })
     }
-    let activeAgentEntriesByWorktreeID = Dictionary(grouping: state.activeAgents.entries) { entry in
-      entry.worktreeID
-    }
+    let activeAgentEntriesByWorktreeID =
+      settingsFile.global.showActiveAgentStatusInShelf
+      ? Dictionary(grouping: state.activeAgents.entries) { entry in entry.worktreeID }
+      : [:]
     // Color identity of the open book's repo (nil ⇒ neutral surface). Shared
     // by the spine fill and the toolbar band so they read as one "L".
     let openColor = openBook.flatMap { repositoryAppearances[$0.repositoryID]?.color }
@@ -85,12 +86,16 @@ struct ShelfView: View {
     // and the toolbar all read as one continuous color.
     .windowChromeTint(chromeFill, edges: [.top, .leading])
     .overlay {
-      ShelfSwipeEventMonitor(isEnabled: books.count > 1) { direction in
-        switch direction {
-        case .next:
+      ShelfSwipeEventMonitor(isEnabled: !books.isEmpty) { action in
+        switch action {
+        case .nextBook:
           store.send(.selectNextShelfBook)
-        case .previous:
+        case .previousBook:
           store.send(.selectPreviousShelfBook)
+        case .nextTab:
+          store.send(.selectNextWorktree)
+        case .previousTab:
+          store.send(.selectPreviousWorktree)
         }
       }
       .accessibilityHidden(true)
@@ -261,14 +266,36 @@ struct ShelfView: View {
   }
 }
 
-private enum ShelfSwipeDirection {
-  case next
-  case previous
+enum ShelfSwipeNavigationAction: Equatable {
+  case nextBook
+  case previousBook
+  case nextTab
+  case previousTab
+}
+
+struct ShelfSwipeGestureClassifier {
+  static let swipeThreshold: CGFloat = 80
+  static let axisDominanceRatio: CGFloat = 1.6
+
+  static func action(
+    accumulatedDeltaX: CGFloat,
+    accumulatedDeltaY: CGFloat
+  ) -> ShelfSwipeNavigationAction? {
+    let absX = abs(accumulatedDeltaX)
+    let absY = abs(accumulatedDeltaY)
+    if absX >= swipeThreshold, absX > absY * axisDominanceRatio {
+      return accumulatedDeltaX > 0 ? .previousBook : .nextBook
+    }
+    if absY >= swipeThreshold, absY > absX * axisDominanceRatio {
+      return accumulatedDeltaY > 0 ? .previousTab : .nextTab
+    }
+    return nil
+  }
 }
 
 private struct ShelfSwipeEventMonitor: NSViewRepresentable {
   let isEnabled: Bool
-  let onSwipe: (ShelfSwipeDirection) -> Void
+  let onSwipe: (ShelfSwipeNavigationAction) -> Void
 
   func makeCoordinator() -> Coordinator {
     Coordinator()
@@ -296,7 +323,7 @@ private struct ShelfSwipeEventMonitor: NSViewRepresentable {
   final class Coordinator {
     weak var view: NSView?
     var isEnabled = false
-    var onSwipe: (ShelfSwipeDirection) -> Void = { _ in }
+    var onSwipe: (ShelfSwipeNavigationAction) -> Void = { _ in }
 
     private var monitor: Any?
     private var accumulatedDeltaX: CGFloat = 0
@@ -304,8 +331,6 @@ private struct ShelfSwipeEventMonitor: NSViewRepresentable {
     private var lastEventTimestamp: TimeInterval = 0
     private var didTriggerCurrentGesture = false
 
-    private let swipeThreshold: CGFloat = 80
-    private let horizontalDominanceRatio: CGFloat = 1.6
     private let eventGapResetInterval: TimeInterval = 0.25
 
     func installIfNeeded() {
@@ -332,6 +357,11 @@ private struct ShelfSwipeEventMonitor: NSViewRepresentable {
         return event
       }
 
+      guard event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) else {
+        resetGesture()
+        return event
+      }
+
       if event.phase.contains(.began)
         || event.timestamp - lastEventTimestamp > eventGapResetInterval
       {
@@ -345,33 +375,29 @@ private struct ShelfSwipeEventMonitor: NSViewRepresentable {
         {
           resetGesture()
         }
-        return isHorizontallyDominant(event) ? nil : event
+        return nil
       }
 
       guard event.momentumPhase.isEmpty else {
-        return event
+        return nil
       }
 
       accumulatedDeltaX += event.scrollingDeltaX
       accumulatedDeltaY += event.scrollingDeltaY
 
-      guard abs(accumulatedDeltaX) >= swipeThreshold,
-        abs(accumulatedDeltaX) > abs(accumulatedDeltaY) * horizontalDominanceRatio
+      guard
+        let action = ShelfSwipeGestureClassifier.action(
+          accumulatedDeltaX: accumulatedDeltaX,
+          accumulatedDeltaY: accumulatedDeltaY
+        )
       else {
-        return event
+        return nil
       }
 
-      let direction: ShelfSwipeDirection = accumulatedDeltaX > 0 ? .previous : .next
       resetAccumulatedDeltas()
       didTriggerCurrentGesture = true
-      onSwipe(direction)
+      onSwipe(action)
       return nil
-    }
-
-    private func isHorizontallyDominant(_ event: NSEvent) -> Bool {
-      let absDeltaX = abs(event.scrollingDeltaX)
-      let absDeltaY = abs(event.scrollingDeltaY)
-      return absDeltaX > 0 && absDeltaX > absDeltaY * horizontalDominanceRatio
     }
 
     private func resetGesture() {

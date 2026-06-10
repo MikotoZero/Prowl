@@ -12,8 +12,8 @@
 Shelf lays your worktrees out as thin vertical **spines** ("books") on the sides,
 with the currently open book's terminal filling the center. Each spine shows the
 project icon/name (rotated) and a column of its **tabs** as small icon slots.
-When Prowl detects agents in that book, the bottom of the spine also shows compact
-agent badges with their current status.
+When Prowl detects an agent in a tab, that tab slot shows the agent status as a
+small colored marker.
 Books near the open one are brighter; distant ones fade — so you always know where
 you are in the stack.
 
@@ -33,11 +33,11 @@ otherwise it's a no-op.
 So `⌘⌃←/→` moves **between agents**, and `⌘⌃↑/↓` moves **between that agent's
 tabs** — triage six in-flight agents one keystroke at a time.
 
-Two-finger horizontal swipes on the trackpad also flip between books: swipe left
-to move to the book on the right, and swipe right to move to the book on the
-left. Book switching is bounded at the shelf edges; it does not wrap around.
-Vertical scrolling inside the terminal keeps working normally; Shelf only
-consumes a swipe after the horizontal movement clearly dominates.
+Hold `⌘` and use a two-finger trackpad swipe for directional navigation:
+horizontal swipes flip between books, and vertical swipes cycle tabs in the open
+book. Book switching is bounded at the shelf edges; it does not wrap around.
+Plain scrolling inside the terminal keeps working normally because Shelf only
+consumes the gesture while `⌘` is held.
 
 ## Interacting with spines
 
@@ -46,7 +46,7 @@ consumes a swipe after the horizontal movement clearly dominates.
 - **Select a tab:** click a tab slot on the open book's spine.
 - **New tab:** the **+** at the bottom of a spine. On a closed book, **+** opens
   the book and creates the tab.
-- **Jump to an agent:** click an agent badge at the bottom of a spine. It focuses
+- **Jump to an agent:** click a tab slot with an agent status marker. It focuses
   that agent's worktree, tab, and pane.
 - **Split:** the open book's spine has **split-vertical** and **split-horizontal**
   buttons (Ghostty `new_split:right` / `new_split:down`).
@@ -65,10 +65,11 @@ selection.
   progressively — a proximity ladder that keeps the stack readable.
 - **Unread notification:** a tab slot highlights orange; the spine header shows an
   orange dot.
-- **Detected agents:** compact badges appear at the bottom of the owning spine.
-  Badge color/status follows the Active Agents states (Working, Blocked, Done,
-  Idle); blocked agents are prioritized first. Shelf keeps agent detection active
-  while visible, even if the Active Agents panel is hidden.
+- **Detected agents:** status markers appear on the owning tab slot. Marker
+  color/status follows the Active Agents states (Working, Blocked, Done, Idle);
+  blocked agents are prioritized first when a split tab contains multiple agents.
+  Shelf keeps agent detection active while visible, even if the Active Agents
+  panel is hidden.
 - Spine tint follows the **repository color** when set (toggle
   `shelfSpineTintFollowsRepositoryColor`); otherwise a fallback
   (`shelfSpineTintFallback`: neutral or system tint) is used.
@@ -83,6 +84,8 @@ spines stay visible so you can pick one.
 ## Settings that affect Shelf
 
 - `defaultViewMode` — launch directly into Shelf.
+- `showActiveAgentStatusInShelf` — overlay detected agent status on Shelf tab
+  icons.
 - `shelfSpineTintFollowsRepositoryColor` — color spines by repo color.
 - `shelfSpineTintFallback` — `neutral` or `systemTint` when a repo has no color.
 - `windowTintMode` / repository colors — chrome tinting.
@@ -98,9 +101,9 @@ See [view-modes](view-modes.md).
 ## Gotchas for agents
 
 - A "book" is a **worktree**; a tab slot is a **tab** within it.
-- Agent badges belong to the terminal surface's owning worktree. If an agent is
-  running from a different working directory, the full Active Agents panel still
-  shows the resolved repository/branch context.
+- Agent status markers belong to the terminal surface's owning tab/worktree. If
+  an agent is running from a different working directory, the full Active Agents
+  panel still shows the resolved repository/branch context.
 - Closing the last tab of a book removes the book from the shelf.
 - The book-switching keys (`⌘⌃←/→`) and tab-cycling keys (`⌘⌃↑/↓`) differ only
   by arrow direction — be precise when describing them.

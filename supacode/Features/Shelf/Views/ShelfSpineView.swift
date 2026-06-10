@@ -160,6 +160,20 @@ struct ShelfSpineView: View {
     repositoryAppearances[book.repositoryID] ?? .empty
   }
 
+  private var activeAgentEntryByTabID: [TerminalTabID: ActiveAgentEntry] {
+    var result: [TerminalTabID: ActiveAgentEntry] = [:]
+    for entry in activeAgentEntries {
+      guard let existing = result[entry.tabID] else {
+        result[entry.tabID] = entry
+        continue
+      }
+      if entry.hasHigherShelfSpinePriority(than: existing) {
+        result[entry.tabID] = entry
+      }
+    }
+    return result
+  }
+
   /// Active-tab highlight fades more gently than the spine background —
   /// the tab-selection indicator has to stay legible even on far-away
   /// books so users can still see which tab would open. Uses absolute
@@ -191,63 +205,22 @@ struct ShelfSpineView: View {
     }
   }
 
-  private var prioritizedActiveAgentEntries: [ActiveAgentEntry] {
-    activeAgentEntries.sorted { lhs, rhs in
-      let lhsPriority = lhs.displayState.shelfSpinePriority
-      let rhsPriority = rhs.displayState.shelfSpinePriority
-      if lhsPriority != rhsPriority {
-        return lhsPriority < rhsPriority
-      }
-      return lhs.lastChangedAt > rhs.lastChangedAt
-    }
-  }
-
-  private var visibleActiveAgentEntries: [ActiveAgentEntry] {
-    let entries = prioritizedActiveAgentEntries
-    guard entries.count > ShelfMetrics.maximumVisibleAgentBadges else { return entries }
-    return Array(entries.prefix(ShelfMetrics.maximumVisibleAgentBadges - 1))
-  }
-
-  private var hiddenActiveAgentCount: Int {
-    max(0, activeAgentEntries.count - visibleActiveAgentEntries.count)
-  }
-
   private var hasBottomControls: Bool {
     onNewTab != nil || onSplitVertical != nil || onSplitHorizontal != nil
   }
 
   @ViewBuilder
   private var footer: some View {
-    // The footer stays pinned under the scrollable tab list. Active agents
-    // share the same compact slot language as tabs/controls so each spine
-    // remains a quick vertical scan instead of becoming a second panel.
-    if !activeAgentEntries.isEmpty || hasBottomControls {
+    // The footer stays pinned under the scrollable tab list so the spine's
+    // tab column can scroll independently from the per-book tab/split controls.
+    if hasBottomControls {
       VStack(spacing: ShelfMetrics.slotSpacing) {
         Divider().opacity(0.3)
-        activeAgentBadges
-        if !activeAgentEntries.isEmpty && hasBottomControls {
-          Divider().opacity(0.3)
-        }
         bottomControls
       }
       .padding(.horizontal, ShelfMetrics.slotHorizontalPadding)
       .padding(.top, ShelfMetrics.sectionGap)
       .padding(.bottom, ShelfMetrics.slotSpacing)
-    }
-  }
-
-  @ViewBuilder
-  private var activeAgentBadges: some View {
-    if !activeAgentEntries.isEmpty {
-      ForEach(visibleActiveAgentEntries) { entry in
-        ShelfSpineAgentBadge(
-          entry: entry,
-          action: { onSelectAgent(entry.id) }
-        )
-      }
-      if hiddenActiveAgentCount > 0 {
-        ShelfSpineAgentOverflowBadge(count: hiddenActiveAgentCount)
-      }
     }
   }
 
@@ -328,6 +301,7 @@ struct ShelfSpineView: View {
 
   @ViewBuilder
   private func tabListContent(state terminalState: WorktreeTerminalState) -> some View {
+    let agentByTabID = activeAgentEntryByTabID
     VStack(spacing: ShelfMetrics.slotSpacing) {
       ForEach(Array(terminalState.tabManager.tabs.enumerated()), id: \.element.id) { index, tab in
         // 1-based hotkey number that matches Cmd+1..9. Tabs at
@@ -345,7 +319,9 @@ struct ShelfSpineView: View {
           hasUnseenNotification: terminalState.hasUnseenNotification(for: tab.id),
           activeHighlightTint: effectiveTintColor,
           activeHighlightAlpha: activeTabHighlightAlpha,
+          activeAgentEntry: agentByTabID[tab.id],
           onTap: { onSelectTab(tab.id) },
+          onSelectAgent: { onSelectAgent($0) },
           onClose: { terminalState.closeTab(tab.id) }
         )
         .terminalTabContextMenu(
@@ -502,14 +478,20 @@ private struct ShelfSpineTabSlot: View {
   /// notification tint is left untouched so unread signals remain
   /// attention-grabbing regardless of distance.
   let activeHighlightAlpha: Double
+  /// Highest-priority agent currently detected in this tab, when the Shelf
+  /// status overlay is enabled. Split tabs can contain more than one agent;
+  /// the spine surfaces the most actionable one and the full Active Agents
+  /// panel remains the detailed roster.
+  let activeAgentEntry: ActiveAgentEntry?
   let onTap: () -> Void
+  let onSelectAgent: (ActiveAgentEntry.ID) -> Void
   let onClose: () -> Void
 
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @State private var isHovering = false
 
   var body: some View {
-    Button(action: onTap) {
+    Button(action: primaryAction) {
       ZStack {
         backgroundFill
         slotContent
@@ -539,7 +521,16 @@ private struct ShelfSpineTabSlot: View {
     .onHover { hovering in
       isHovering = hovering
     }
-    .help(tab.displayTitle)
+    .help(helpText)
+    .accessibilityLabel(Text(accessibilityLabel))
+  }
+
+  private func primaryAction() {
+    if let activeAgentEntry {
+      onSelectAgent(activeAgentEntry.id)
+    } else {
+      onTap()
+    }
   }
 
   /// When ⌘ is held AND this tab has a `Cmd+N` hotkey AND this slot is
@@ -561,17 +552,24 @@ private struct ShelfSpineTabSlot: View {
       }
       .accessibilityHidden(true)
     } else {
-      TabIconImage(
-        rawName: tab.icon ?? ShelfMetrics.defaultTabIcon,
-        pointSize: ShelfMetrics.tabIconPointSize
-      )
-      .foregroundStyle(foregroundTint)
-      // Dim tabs without a hotkey when ⌘ is held — but only on the open
-      // book, where the dimming pairs with the visible ⌘N glyphs on its
-      // siblings. On closed books no glyph appears, so dimming would be
-      // a stray visual change with no story behind it.
-      .opacity(commandKeyObserver.isPressed && hotkeyIndex == nil && isOpenBook ? 0.45 : 1)
-      .accessibilityHidden(true)
+      ZStack(alignment: .bottomTrailing) {
+        TabIconImage(
+          rawName: tab.icon ?? ShelfMetrics.defaultTabIcon,
+          pointSize: ShelfMetrics.tabIconPointSize
+        )
+        .foregroundStyle(foregroundTint)
+        // Dim tabs without a hotkey when ⌘ is held — but only on the open
+        // book, where the dimming pairs with the visible ⌘N glyphs on its
+        // siblings. On closed books no glyph appears, so dimming would be
+        // a stray visual change with no story behind it.
+        .opacity(commandKeyObserver.isPressed && hotkeyIndex == nil && isOpenBook ? 0.45 : 1)
+        .accessibilityHidden(true)
+
+        if let activeAgentEntry {
+          statusMarker(for: activeAgentEntry)
+            .offset(x: 3, y: 3)
+        }
+      }
     }
   }
 
@@ -586,6 +584,13 @@ private struct ShelfSpineTabSlot: View {
     } else if isActive {
       RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
         .fill(activeHighlightTint.opacity(activeHighlightAlpha))
+    } else if let activeAgentEntry {
+      RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
+        .fill(activeAgentEntry.displayState.foregroundStyle.opacity(0.12))
+        .overlay {
+          RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
+            .stroke(activeAgentEntry.displayState.foregroundStyle.opacity(0.45), lineWidth: 1)
+        }
     } else {
       Color.clear
     }
@@ -596,53 +601,9 @@ private struct ShelfSpineTabSlot: View {
     if isActive { return .primary }
     return .secondary
   }
-}
-
-private struct ShelfSpineAgentBadge: View {
-  let entry: ActiveAgentEntry
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      ZStack(alignment: .bottomTrailing) {
-        RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
-          .fill(entry.displayState.foregroundStyle.opacity(0.12))
-          .overlay {
-            RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
-              .stroke(entry.displayState.foregroundStyle.opacity(0.45), lineWidth: 1)
-          }
-
-        agentIcon
-          .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
-
-        statusMarker
-          .offset(x: 2, y: 2)
-      }
-      .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
-      .contentShape(.rect)
-    }
-    .buttonStyle(.plain)
-    .help(helpText)
-    .accessibilityLabel(Text(accessibilityLabel))
-  }
 
   @ViewBuilder
-  private var agentIcon: some View {
-    if let icon = CommandIconMap.iconForFirstToken(entry.agent.iconLookupToken) {
-      TabIconImage(
-        rawName: icon.storageString,
-        pointSize: ShelfMetrics.agentBadgeIconPointSize
-      )
-      .foregroundStyle(.primary)
-    } else {
-      Image(systemName: "sparkle")
-        .imageScale(.small)
-        .foregroundStyle(.primary)
-        .accessibilityHidden(true)
-    }
-  }
-
-  private var statusMarker: some View {
+  private func statusMarker(for entry: ActiveAgentEntry) -> some View {
     Image(systemName: entry.displayState.shelfSpineStatusSymbol)
       .font(.caption2.weight(.bold))
       .foregroundStyle(entry.displayState.foregroundStyle)
@@ -657,35 +618,14 @@ private struct ShelfSpineAgentBadge: View {
   }
 
   private var helpText: String {
-    let tabTitle = ActiveAgentsPanel.tabTitle(for: entry)
-    return "Jump to \(entry.agent.displayName): \(entry.displayState.label) - \(tabTitle)"
+    guard let activeAgentEntry else { return tab.displayTitle }
+    let tabTitle = ActiveAgentsPanel.tabTitle(for: activeAgentEntry)
+    return "Jump to \(activeAgentEntry.agent.displayName): \(activeAgentEntry.displayState.label) - \(tabTitle)"
   }
 
   private var accessibilityLabel: String {
-    "Jump to \(entry.agent.displayName), \(entry.displayState.label)"
-  }
-}
-
-private struct ShelfSpineAgentOverflowBadge: View {
-  let count: Int
-
-  var body: some View {
-    Text("+\(count)")
-      .font(.caption2.weight(.semibold).monospacedDigit())
-      .foregroundStyle(.secondary)
-      .lineLimit(1)
-      .minimumScaleFactor(0.7)
-      .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
-      .background {
-        RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
-          .fill(Color.primary.opacity(0.06))
-      }
-      .help(helpText)
-      .accessibilityLabel(Text(helpText))
-  }
-
-  private var helpText: String {
-    "\(count) more active agents"
+    guard let activeAgentEntry else { return tab.displayTitle }
+    return "Jump to \(activeAgentEntry.agent.displayName), \(activeAgentEntry.displayState.label)"
   }
 }
 
@@ -729,8 +669,6 @@ enum ShelfMetrics {
   /// doesn't crowd into the divider above the `+` button.
   static let sectionGap: CGFloat = 10
   static let aggregatedDotSize: CGFloat = 6
-  static let maximumVisibleAgentBadges = 4
-  static let agentBadgeIconPointSize: CGFloat = 15
   static let agentStatusMarkerSize: CGFloat = 11
   /// Max pre-rotation width (i.e. visual height after 90° rotation) of the
   /// spine header title. Texts longer than this get middle-truncated.
@@ -760,5 +698,16 @@ extension AgentDisplayState {
     case .done: return "checkmark"
     case .idle: return "circle.fill"
     }
+  }
+}
+
+extension ActiveAgentEntry {
+  fileprivate func hasHigherShelfSpinePriority(than other: ActiveAgentEntry) -> Bool {
+    let priority = displayState.shelfSpinePriority
+    let otherPriority = other.displayState.shelfSpinePriority
+    if priority != otherPriority {
+      return priority < otherPriority
+    }
+    return lastChangedAt > other.lastChangedAt
   }
 }
