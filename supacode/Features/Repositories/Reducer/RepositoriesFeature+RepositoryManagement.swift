@@ -164,10 +164,25 @@ extension RepositoriesFeature {
 
     case .requestRemoveRepository(let repositoryID):
       if let repository = state.repositories[id: repositoryID], repository.isWorkspace {
+        let branchOptions = (repository.workspace?.repositories ?? []).compactMap {
+          entry -> RemoveWorkspaceConfirmation.BranchOption? in
+          guard entry.sourceKind != .remote,
+            let branchName = entry.branchName,
+            entry.sourceLocation != nil
+          else {
+            return nil
+          }
+          return RemoveWorkspaceConfirmation.BranchOption(
+            id: entry.id,
+            repositoryName: entry.name,
+            branchName: branchName
+          )
+        }
         state.removeWorkspaceConfirmation = RemoveWorkspaceConfirmation(
           repositoryID: repositoryID,
           workspaceTitle: repository.name,
-          rootPath: repository.rootURL.path(percentEncoded: false)
+          rootPath: repository.rootURL.path(percentEncoded: false),
+          branchOptions: branchOptions
         )
         return .none
       }
@@ -176,6 +191,16 @@ extension RepositoriesFeature {
 
     case .removeWorkspaceDeleteFilesChanged(let deleteFiles):
       state.removeWorkspaceConfirmation?.deleteFiles = deleteFiles
+      return .none
+
+    case .removeWorkspaceDeleteBranchChanged(let entryID, let isSelected):
+      guard var confirmation = state.removeWorkspaceConfirmation,
+        let index = confirmation.branchOptions.firstIndex(where: { $0.id == entryID })
+      else {
+        return .none
+      }
+      confirmation.branchOptions[index].isSelected = isSelected
+      state.removeWorkspaceConfirmation = confirmation
       return .none
 
     case .removeWorkspacePromptDismissed:
@@ -205,9 +230,15 @@ extension RepositoriesFeature {
         )
       }
       let rootURL = repository.rootURL
+      let deleteBranchEntryIDs = Set(confirmation.branchOptions.filter(\.isSelected).map(\.id))
       let gitRunner = Self.workspaceGitRunner(shellClient: shellClient)
       return .run { send in
-        await ProjectWorkspace.cleanup(workspace, rootURL: rootURL, gitRunner: gitRunner)
+        await ProjectWorkspace.cleanup(
+          workspace,
+          rootURL: rootURL,
+          deleteBranchEntryIDs: deleteBranchEntryIDs,
+          gitRunner: gitRunner
+        )
         await send(
           .repositoryManagement(
             .repositoryRemoved(repository.id, selectionWasRemoved: selectionWasRemoved)

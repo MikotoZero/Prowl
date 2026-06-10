@@ -563,6 +563,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
   static func cleanup(
     _ workspace: ProjectWorkspace,
     rootURL: URL,
+    deleteBranchEntryIDs: Set<String> = [],
     fileManager: FileManager = .default,
     gitRunner: ProjectWorkspaceGitRunner
   ) async {
@@ -587,6 +588,20 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
         )
       } catch {
         log.warning("Workspace cleanup could not unregister worktree at \(entryPath): \(error)")
+      }
+      // Branch deletion must follow the worktree removal — git refuses to
+      // delete a branch that still has a checkout.
+      if deleteBranchEntryIDs.contains(entry.id), let branchName = entry.branchName {
+        do {
+          try await gitRunner.run(
+            ProjectWorkspaceGitCommand(
+              arguments: ["-C", sourceLocation, "branch", "-D", branchName],
+              currentDirectoryURL: nil
+            )
+          )
+        } catch {
+          log.warning("Workspace cleanup could not delete branch \(branchName): \(error)")
+        }
       }
     }
     do {

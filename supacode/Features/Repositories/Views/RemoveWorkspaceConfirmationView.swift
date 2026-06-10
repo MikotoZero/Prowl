@@ -3,6 +3,7 @@ import SwiftUI
 struct RemoveWorkspaceConfirmationView: View {
   let confirmation: RemoveWorkspaceConfirmation
   let onDeleteFilesChanged: (Bool) -> Void
+  let onDeleteBranchChanged: (String, Bool) -> Void
   let onCancel: () -> Void
   let onRemove: () -> Void
 
@@ -33,6 +34,29 @@ struct RemoveWorkspaceConfirmationView: View {
         "Unregister worktrees created for this workspace from their source repositories, "
           + "then delete the workspace folder."
       )
+
+      if !confirmation.branchOptions.isEmpty {
+        VStack(alignment: .leading, spacing: 6) {
+          ForEach(confirmation.branchOptions) { option in
+            Toggle(
+              isOn: Binding(
+                get: { option.isSelected },
+                set: { onDeleteBranchChanged(option.id, $0) }
+              )
+            ) {
+              HStack(spacing: 4) {
+                Text("Delete branch")
+                Text(option.branchName)
+                  .font(.body.monospaced())
+                Text("in \(option.repositoryName)")
+              }
+            }
+            .help("Delete the branch from the source repository with git branch -D after removing the worktree.")
+          }
+        }
+        .padding(.leading, 20)
+        .disabled(!confirmation.deleteFiles)
+      }
 
       Text("Linked repositories stay untouched; only the symlinks inside the workspace folder are removed.")
         .font(.footnote)

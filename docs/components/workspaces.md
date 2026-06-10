@@ -92,10 +92,13 @@ Branch behavior is explicit:
 it only removes the entry from Prowl and leaves everything on disk. Tick **Also
 delete the workspace folder and its worktrees** to additionally unregister the
 worktrees that were created for this workspace from their source repositories
-(`git worktree remove --force`) and delete the workspace folder. Linked
-repositories stay untouched — only the symlinks inside the workspace folder are
-removed. Cleanup is best-effort: a broken source repository is logged and
-skipped instead of blocking the deletion.
+(`git worktree remove --force`) and delete the workspace folder. Worktree
+entries with a recorded branch additionally offer a per-repository **Delete
+branch** checkbox that removes the branch from the source repository
+(`git branch -D`) after the worktree is gone. Linked repositories stay
+untouched — only the symlinks inside the workspace folder are removed. Cleanup
+is best-effort: a broken source repository is logged and skipped instead of
+blocking the deletion.
 
 ## Metadata
 

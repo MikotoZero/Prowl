@@ -115,6 +115,9 @@ struct ContentView: View {
           onDeleteFilesChanged: {
             repositoriesStore.send(.repositoryManagement(.removeWorkspaceDeleteFilesChanged($0)))
           },
+          onDeleteBranchChanged: {
+            repositoriesStore.send(.repositoryManagement(.removeWorkspaceDeleteBranchChanged($0, $1)))
+          },
           onCancel: {
             repositoriesStore.send(.repositoryManagement(.removeWorkspacePromptDismissed))
           },

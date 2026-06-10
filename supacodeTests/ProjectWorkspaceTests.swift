@@ -731,6 +731,50 @@ struct ProjectWorkspaceTests {
     #expect(FileManager.default.fileExists(atPath: linkedSourceURL.path(percentEncoded: false)))
   }
 
+  @Test func cleanupDeletesSelectedBranchesAfterWorktreeRemoval() async throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    let bareURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: bareURL)
+    }
+    try FileManager.default.createDirectory(
+      at: rootURL.appending(path: "api"),
+      withIntermediateDirectories: true
+    )
+
+    let workspace = ProjectWorkspace(
+      repositories: [
+        ProjectWorkspace.RepositoryEntry(
+          id: "api",
+          name: "API",
+          path: "api",
+          sourceKind: .bareRepository,
+          sourceLocation: bareURL.path(percentEncoded: false),
+          branchName: "chore/x"
+        )
+      ]
+    )
+    let commands = LockIsolated<[ProjectWorkspaceGitCommand]>([])
+    let apiPath = rootURL.appending(path: "api").standardizedFileURL.path(percentEncoded: false)
+    await ProjectWorkspace.cleanup(
+      workspace,
+      rootURL: rootURL,
+      deleteBranchEntryIDs: ["api"],
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        commands.withValue { $0.append(command) }
+      }
+    )
+
+    let barePath = bareURL.path(percentEncoded: false)
+    #expect(
+      commands.value.map(\.arguments) == [
+        ["-C", barePath, "worktree", "remove", "--force", apiPath],
+        ["-C", barePath, "branch", "-D", "chore/x"],
+      ])
+    #expect(!FileManager.default.fileExists(atPath: rootURL.path(percentEncoded: false)))
+  }
+
   @Test func listRuntimeContextsReportWorkspaceKind() {
     let rootURL = URL(fileURLWithPath: "/tmp/workspace")
     let repository = Repository(

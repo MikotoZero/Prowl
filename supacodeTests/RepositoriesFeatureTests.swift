@@ -1134,6 +1134,66 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func requestRemoveWorkspaceBuildsBranchOptions() async {
+    let workspaceID = "/tmp/ws"
+    let workspace = ProjectWorkspace(
+      title: "WS",
+      repositories: [
+        ProjectWorkspace.RepositoryEntry(
+          id: "api",
+          name: "API",
+          path: "api",
+          sourceKind: .bareRepository,
+          sourceLocation: "/tmp/api.git",
+          branchName: "chore/x"
+        ),
+        ProjectWorkspace.RepositoryEntry(
+          id: "app",
+          name: "App",
+          path: "app",
+          sourceKind: .existingPath,
+          sourceLocation: "/tmp/app"
+        ),
+        ProjectWorkspace.RepositoryEntry(
+          id: "web",
+          name: "Web",
+          path: "web",
+          sourceKind: .remote,
+          sourceLocation: "git@github.com:onevcat/web.git",
+          branchName: "feature/web"
+        ),
+      ]
+    )
+    let repository = makeRepository(
+      id: workspaceID,
+      name: "WS",
+      kind: .plain,
+      worktrees: [],
+      workspace: workspace
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.repositoryManagement(.requestRemoveRepository(workspaceID))) {
+      $0.removeWorkspaceConfirmation = RemoveWorkspaceConfirmation(
+        repositoryID: workspaceID,
+        workspaceTitle: "WS",
+        rootPath: workspaceID,
+        branchOptions: [
+          RemoveWorkspaceConfirmation.BranchOption(
+            id: "api",
+            repositoryName: "API",
+            branchName: "chore/x"
+          )
+        ]
+      )
+    }
+    await store.send(.repositoryManagement(.removeWorkspaceDeleteBranchChanged("api", true))) {
+      $0.removeWorkspaceConfirmation?.branchOptions[0].isSelected = true
+    }
+  }
+
   @Test func removeWorkspaceConfirmedRemovesEntry() async {
     let workspaceID = "/tmp/ws"
     let repository = makeRepository(

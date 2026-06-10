@@ -70,10 +70,18 @@ struct ForceDeleteBranchRequest: Equatable {
 }
 
 struct RemoveWorkspaceConfirmation: Equatable {
+  struct BranchOption: Equatable, Identifiable {
+    let id: String
+    let repositoryName: String
+    let branchName: String
+    var isSelected = false
+  }
+
   let repositoryID: Repository.ID
   let workspaceTitle: String
   let rootPath: String
   var deleteFiles = false
+  var branchOptions: [BranchOption] = []
 }
 
 @Reducer
@@ -217,6 +225,7 @@ struct RepositoriesFeature {
     case requestRemoveRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
     case removeWorkspaceDeleteFilesChanged(Bool)
+    case removeWorkspaceDeleteBranchChanged(String, Bool)
     case removeWorkspacePromptDismissed
     case removeWorkspacePromptConfirmed
     case repositoryRemoved(Repository.ID, selectionWasRemoved: Bool)
