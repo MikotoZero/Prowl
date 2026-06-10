@@ -60,8 +60,9 @@ folder is materialized:
   the workspace gets an isolated checkout on a new branch created from the
   selected base ref, without touching the source repository's own checkout. The
   new worktree also appears in the source repository's worktree list.
-- **Use Existing** runs `git worktree add` with the selected ref. Git rejects a
-  local branch that is already checked out elsewhere.
+- **Use Existing** runs `git worktree add` with the selected ref. Choosing a
+  remote-tracking ref creates a local tracking branch instead of a detached
+  worktree. Git rejects a branch that is already checked out elsewhere.
 
 The creation prompt detects base-ref candidates for already opened, local, and
 bare repositories by reading local git refs, preferring the detected default
@@ -78,10 +79,12 @@ Branch behavior is explicit:
   every source kind.
 - **Use Existing** uses the selected ref directly. For remote clones, Prowl
   checks out the selected remote branch after clone; Git creates the normal
-  local tracking branch for refs such as `origin/feature`. For bare
-  repositories, Prowl passes the selected ref to `git worktree add`, so local
-  branch refs produce branch worktrees and remote-tracking refs produce detached
-  worktrees.
+  local tracking branch for refs such as `origin/feature`. For bare and local
+  repositories, a local branch ref produces a branch worktree, and a
+  remote-tracking ref such as `origin/feature` runs
+  `git worktree add --track -B feature`, which creates the local tracking
+  branch — aligning a same-named local branch to the remote when one exists.
+  Git refuses if that branch is already checked out in another worktree.
 
 ## Metadata
 

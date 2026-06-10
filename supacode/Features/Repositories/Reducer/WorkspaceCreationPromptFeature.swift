@@ -221,7 +221,7 @@ struct WorkspaceCreationPromptFeature {
         state.repositories.append(
           ProjectWorkspaceCreationRepository(
             id: id,
-            name: Repository.name(for: url),
+            name: Self.defaultRepositoryName(for: url),
             sourceKind: sourceKind,
             sourceLocation: rootPath
           )
@@ -287,7 +287,7 @@ struct WorkspaceCreationPromptFeature {
         }
         repository.sourceLocation = rootPath
         if repository.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-          repository.name = Repository.name(for: URL(fileURLWithPath: rootPath))
+          repository.name = Self.defaultRepositoryName(for: URL(fileURLWithPath: rootPath))
         }
         repository.baseRef = nil
         repository.baseRefOptions = []
@@ -381,6 +381,14 @@ struct WorkspaceCreationPromptFeature {
     }
   }
 
+  static func defaultRepositoryName(for url: URL) -> String {
+    let name = Repository.name(for: url)
+    guard name.count > 4, name.hasSuffix(".git") else {
+      return name
+    }
+    return String(name.dropLast(4))
+  }
+
   static func plan(
     for repository: ProjectWorkspaceCreationRepository
   ) -> Result<ProjectWorkspaceRepositoryPlan, ProjectWorkspaceCreationError> {
@@ -414,7 +422,18 @@ struct WorkspaceCreationPromptFeature {
       else {
         return .failure(.missingExistingRef(displayName))
       }
-      checkout = .useExistingRef(baseRef)
+      let kind = repository.baseRefOptions.first { $0.ref == baseRef }?.kind ?? .local
+      if kind == .local {
+        checkout = .useExistingRef(baseRef)
+      } else {
+        // Remote refs are named <remote>/<branch>; materialize them as a local
+        // tracking branch instead of a detached worktree.
+        let branchName = baseRef.split(separator: "/").dropFirst().joined(separator: "/")
+        guard !branchName.isEmpty else {
+          return .failure(.missingExistingRef(displayName))
+        }
+        checkout = .trackRemoteRef(remoteRef: baseRef, branchName: branchName)
+      }
     }
     return .success(
       ProjectWorkspaceRepositoryPlan(

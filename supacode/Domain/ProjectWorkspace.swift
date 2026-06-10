@@ -50,6 +50,7 @@ nonisolated enum ProjectWorkspaceRepositoryCheckout: Equatable, Hashable, Sendab
   case link
   case createBranch(branchName: String, baseRef: String?)
   case useExistingRef(String)
+  case trackRemoteRef(remoteRef: String, branchName: String)
 }
 
 nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Sendable, Identifiable {
@@ -598,7 +599,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
         let sourceURL = URL(fileURLWithPath: sourcePath, isDirectory: true).standardizedFileURL
         try fileManager.createSymbolicLink(at: destinationURL, withDestinationURL: sourceURL)
         ledger.createdURLs.append(destinationURL)
-      case .createBranch, .useExistingRef:
+      case .createBranch, .useExistingRef, .trackRemoteRef:
         try await gitRunner.run(
           worktreeAddCommand(checkout, sourcePath: sourcePath, destinationPath: destinationPath)
         )
@@ -646,6 +647,9 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     case .useExistingRef(let ref):
       entryBranchName = nil
       entryBaseRef = ref
+    case .trackRemoteRef(let remoteRef, let branchName):
+      entryBranchName = branchName
+      entryBaseRef = remoteRef
     }
 
     return RepositoryEntry(
@@ -683,6 +687,13 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
         throw ProjectWorkspaceCreationError.missingExistingRef(name)
       }
       return .useExistingRef(trimmedRef)
+    case .trackRemoteRef(let remoteRef, let branchName):
+      guard let trimmedRemoteRef = remoteRef.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+        let trimmedBranch = branchName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+      else {
+        throw ProjectWorkspaceCreationError.missingExistingRef(name)
+      }
+      return .trackRemoteRef(remoteRef: trimmedRemoteRef, branchName: trimmedBranch)
     }
   }
 
@@ -702,6 +713,10 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       }
     case .useExistingRef(let ref):
       arguments += [destinationPath, "--end-of-options", ref]
+    case .trackRemoteRef(let remoteRef, let branchName):
+      // -B aligns a same-named local branch to the remote ref; git still refuses
+      // when that branch is checked out in another worktree.
+      arguments += ["--track", "-B", branchName, destinationPath, "--end-of-options", remoteRef]
     }
     return ProjectWorkspaceGitCommand(arguments: arguments, currentDirectoryURL: nil)
   }
@@ -734,7 +749,19 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
         arguments: ["-C", destinationPath, "checkout", "--end-of-options", remoteCloneExistingCheckoutRef(ref)],
         currentDirectoryURL: nil
       )
+    case .trackRemoteRef(_, let branchName):
+      return ProjectWorkspaceGitCommand(
+        arguments: ["-C", destinationPath, "checkout", "--end-of-options", branchName],
+        currentDirectoryURL: nil
+      )
     }
+  }
+
+  private static func withoutGitSuffix(_ name: String) -> String {
+    guard name.count > 4, name.hasSuffix(".git") else {
+      return name
+    }
+    return String(name.dropLast(4))
   }
 
   private static func remoteCloneExistingCheckoutRef(_ baseRef: String) -> String {
@@ -764,9 +791,9 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     displayName: String,
     occupiedNames: inout Set<String>
   ) -> String {
-    var baseName = sanitizedWorkspaceComponent(repository.path ?? "")
+    var baseName = withoutGitSuffix(sanitizedWorkspaceComponent(repository.path ?? ""))
     if baseName.isEmpty {
-      baseName = sanitizedWorkspaceComponent(displayName)
+      baseName = withoutGitSuffix(sanitizedWorkspaceComponent(displayName))
     }
     if baseName.isEmpty {
       baseName = "repository"

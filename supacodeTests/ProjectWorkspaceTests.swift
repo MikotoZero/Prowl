@@ -345,6 +345,94 @@ struct ProjectWorkspaceTests {
     #expect(loaded.repositories.map(\.baseRef) == ["origin/feature/login", "main"])
   }
 
+  @Test func createWorkspaceTracksRemoteRefsAsLocalBranches() async throws {
+    let rootURL = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-tracked-ref-workspace-\(UUID().uuidString)")
+      .standardizedFileURL
+    let bareURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: bareURL)
+    }
+    let commands = LockIsolated<[ProjectWorkspaceGitCommand]>([])
+    let workspace = try await ProjectWorkspace.create(
+      ProjectWorkspaceCreationRequest(
+        draft: ProjectWorkspaceCreationDraft(
+          title: "Tracked Refs",
+          rootURL: rootURL,
+          repositories: [
+            ProjectWorkspaceRepositoryPlan(
+              id: "app",
+              name: "App",
+              path: "app",
+              sourceKind: .remote,
+              sourceLocation: "git@github.com:onevcat/app.git",
+              checkout: .trackRemoteRef(remoteRef: "origin/chore/disable-spine", branchName: "chore/disable-spine")
+            ),
+            ProjectWorkspaceRepositoryPlan(
+              id: "maker",
+              name: "maker.git",
+              path: nil,
+              sourceKind: .bareRepository,
+              sourceLocation: bareURL.path(percentEncoded: false),
+              checkout: .trackRemoteRef(remoteRef: "origin/chore/disable-spine", branchName: "chore/disable-spine")
+            ),
+          ]
+        ),
+        createdAt: Date(timeIntervalSince1970: 8_901_234)
+      ),
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        commands.withValue { $0.append(command) }
+      }
+    )
+
+    let rootPath = rootURL.path(percentEncoded: false)
+    let barePath = normalizedTestPath(bareURL)
+    #expect(
+      commands.value.map(\.arguments) == [
+        ["clone", "--end-of-options", "git@github.com:onevcat/app.git", "\(rootPath)/app"],
+        ["-C", "\(rootPath)/app", "checkout", "--end-of-options", "chore/disable-spine"],
+        [
+          "-C", barePath, "worktree", "add", "--track", "-B", "chore/disable-spine",
+          "\(rootPath)/maker", "--end-of-options", "origin/chore/disable-spine",
+        ],
+      ])
+    #expect(workspace.repositories.map(\.path) == ["app", "maker"])
+    #expect(workspace.repositories.map(\.branchName) == ["chore/disable-spine", "chore/disable-spine"])
+    #expect(
+      workspace.repositories.map(\.baseRef)
+        == ["origin/chore/disable-spine", "origin/chore/disable-spine"]
+    )
+  }
+
+  @Test func planMapsRemoteTrackingRefToTrackingBranch() {
+    let repository = ProjectWorkspaceCreationRepository(
+      id: "maker",
+      name: "maker.git",
+      sourceKind: .bareRepository,
+      sourceLocation: "/tmp/maker.git",
+      checkoutMode: .useExistingRef,
+      baseRef: "origin/chore/x",
+      baseRefOptions: [GitBranchRefOption(ref: "origin/chore/x", kind: .remoteTracking)]
+    )
+
+    #expect(
+      WorkspaceCreationPromptFeature.plan(for: repository).map(\.checkout)
+        == .success(.trackRemoteRef(remoteRef: "origin/chore/x", branchName: "chore/x"))
+    )
+  }
+
+  @Test func defaultRepositoryNameStripsGitSuffix() {
+    #expect(
+      WorkspaceCreationPromptFeature.defaultRepositoryName(for: URL(fileURLWithPath: "/tmp/maker.git"))
+        == "maker"
+    )
+    #expect(
+      WorkspaceCreationPromptFeature.defaultRepositoryName(for: URL(fileURLWithPath: "/tmp/maker"))
+        == "maker"
+    )
+  }
+
   @Test func createWorkspaceMaterializesLocalRepositoriesAsWorktrees() async throws {
     let rootURL = FileManager.default.temporaryDirectory
       .appending(path: "prowl-local-worktree-workspace-\(UUID().uuidString)")

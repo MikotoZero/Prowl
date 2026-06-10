@@ -377,10 +377,7 @@ struct AppFeatureCommandPaletteTests {
     await store.send(.commandPalette(.delegate(.newWorkspace)))
     await store.receive(\.repositories.workspaceCreation.promptRequested) {
       let title = "Workspace"
-      let expectedRootPath = SupacodePaths.workspacesDirectory
-        .appending(path: ProjectWorkspace.defaultWorkspaceFolderName(for: title), directoryHint: .isDirectory)
-        .standardizedFileURL
-        .path(percentEncoded: false)
+      let expectedRootPath = expectedDefaultWorkspaceRootPath(for: title)
       $0.repositories.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
         repositories: [],
         title: title,
