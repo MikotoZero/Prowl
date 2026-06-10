@@ -194,19 +194,21 @@ struct SidebarListView: View {
         await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
       }
       .toolbar {
-        ToolbarItemGroup(placement: .automatic) {
-          Button {
-            store.send(.workspaceCreation(.promptRequested))
-          } label: {
-            Label("New Workspace", systemImage: "folder.badge.person.crop")
-          }
-          .help("New Workspace")
-          Button {
-            store.send(.setOpenPanelPresented(true))
+        ToolbarItem(placement: .automatic) {
+          // Single toolbar slot: two separate buttons overflow into the
+          // window-trailing ">>" menu when the sidebar gets narrow.
+          Menu {
+            Button {
+              store.send(.workspaceCreation(.promptRequested))
+            } label: {
+              Label("New Workspace", systemImage: "folder.badge.person.crop")
+            }
           } label: {
             Label("Add Repository", systemImage: "folder.badge.plus")
+          } primaryAction: {
+            store.send(.setOpenPanelPresented(true))
           }
-          .help("Add Repository")
+          .help("Add Repository — open the menu for New Workspace")
         }
       }
     }  // ScrollViewReader
