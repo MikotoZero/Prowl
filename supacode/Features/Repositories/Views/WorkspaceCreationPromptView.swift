@@ -261,6 +261,20 @@ struct WorkspaceCreationPromptView: View {
       )
       .textFieldStyle(.roundedBorder)
       .disabled(store.isCreating)
+
+      Menu {
+        ForEach(repository.baseRefOptions, id: \.self) { option in
+          Button(option) {
+            store.send(.repositoryBaseRefChanged(repository.id, option))
+          }
+        }
+      } label: {
+        Image(systemName: "chevron.down")
+          .accessibilityLabel("Choose Base Ref")
+      }
+      .buttonStyle(.borderless)
+      .help("Choose Base Ref")
+      .disabled(store.isCreating || repository.baseRefOptions.isEmpty)
     }
   }
 
@@ -296,7 +310,7 @@ struct WorkspaceCreationPromptView: View {
       guard response == .OK, let url = panel.url else {
         return
       }
-      store.send(.repositorySourceLocationChanged(repository.id, url.path(percentEncoded: false)))
+      store.send(.repositorySourceChosen(repository.id, url.path(percentEncoded: false)))
     }
   }
 

@@ -45,6 +45,12 @@ Repository sources can be mixed in one workspace:
   `source_kind: bare_repository`. If both branch and base ref are supplied,
   Prowl creates the worktree branch from that base ref.
 
+The creation prompt detects base-ref candidates for already opened, local, and
+bare repositories by reading local git refs, preferring the detected default
+branch such as `main` or `master`. Remote clone entries show common base-ref
+candidates (`main`, `master`, `origin/main`, `origin/master`) without probing
+the network; you can choose one from the menu or type any ref manually.
+
 ## Metadata
 
 Example `.prowl/workspace.json`:

@@ -47,6 +47,7 @@ struct WorkspaceCreationPromptFeature {
     case repositorySourceKindChanged(Repository.ID, ProjectWorkspaceRepositorySourceKind)
     case repositoryNameChanged(Repository.ID, String)
     case repositoryPathChanged(Repository.ID, String)
+    case repositorySourceChosen(Repository.ID, String)
     case repositorySourceLocationChanged(Repository.ID, String)
     case repositoryBranchNameChanged(Repository.ID, String)
     case repositoryBaseRefChanged(Repository.ID, String)
@@ -60,6 +61,7 @@ struct WorkspaceCreationPromptFeature {
 
   @CasePathable
   enum Delegate: Equatable {
+    case baseRefSourceChanged(Repository.ID)
     case cancel
     case submit(ProjectWorkspaceCreationDraft)
   }
@@ -81,7 +83,10 @@ struct WorkspaceCreationPromptFeature {
             id: id,
             name: "",
             sourceKind: sourceKind,
-            sourceLocation: ""
+            sourceLocation: "",
+            baseRefOptions: sourceKind == .remote
+              ? ProjectWorkspaceCreationRepository.commonRemoteBaseRefOptions
+              : []
           )
         )
         state.selectedRepositoryIDs.insert(id)
@@ -106,7 +111,7 @@ struct WorkspaceCreationPromptFeature {
         )
         state.selectedRepositoryIDs.insert(id)
         state.validationMessage = nil
-        return .none
+        return .send(.delegate(.baseRefSourceChanged(id)))
 
       case .removeRepository(let repositoryID):
         state.repositories.remove(id: repositoryID)
@@ -130,10 +135,17 @@ struct WorkspaceCreationPromptFeature {
         repository.sourceKind = sourceKind
         if sourceKind == .remote {
           repository.sourceLocation = ""
+          repository.baseRef = nil
+          repository.baseRefOptions = ProjectWorkspaceCreationRepository.commonRemoteBaseRefOptions
+        } else {
+          repository.baseRefOptions = []
         }
         state.repositories[id: repositoryID] = repository
         state.validationMessage = nil
-        return .none
+        guard sourceKind != .remote, repository.localSourceURL != nil else {
+          return .none
+        }
+        return .send(.delegate(.baseRefSourceChanged(repositoryID)))
 
       case .repositoryNameChanged(let repositoryID, let name):
         state.repositories[id: repositoryID]?.name = name
@@ -144,6 +156,24 @@ struct WorkspaceCreationPromptFeature {
         state.repositories[id: repositoryID]?.path = path
         state.validationMessage = nil
         return .none
+
+      case .repositorySourceChosen(let repositoryID, let sourceLocation):
+        guard let rootPath = PathPolicy.normalizePath(sourceLocation) else {
+          state.validationMessage =
+            ProjectWorkspaceCreationError.missingRepositorySource("repository").localizedDescription
+          return .none
+        }
+        guard var repository = state.repositories[id: repositoryID] else {
+          return .none
+        }
+        repository.sourceLocation = rootPath
+        if repository.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          repository.name = Repository.name(for: URL(fileURLWithPath: rootPath))
+        }
+        repository.baseRefOptions = []
+        state.repositories[id: repositoryID] = repository
+        state.validationMessage = nil
+        return .send(.delegate(.baseRefSourceChanged(repositoryID)))
 
       case .repositorySourceLocationChanged(let repositoryID, let sourceLocation):
         state.repositories[id: repositoryID]?.sourceLocation = sourceLocation

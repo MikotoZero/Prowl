@@ -218,6 +218,14 @@ struct RepositoriesFeature {
     case promptRequested
     case promptCanceled
     case promptDismissed
+    case refreshBaseRefs(Repository.ID)
+    case baseRefsLoaded(
+      repositoryID: Repository.ID,
+      sourceKind: ProjectWorkspaceRepositorySourceKind,
+      sourceLocation: String,
+      options: [String],
+      defaultBaseRef: String?
+    )
     case createWorkspace(ProjectWorkspaceCreationDraft)
     case workspaceCreated(URL)
     case workspaceCreationFailed(String)

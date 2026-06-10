@@ -37,11 +37,36 @@ extension RepositoriesFeature {
         rootPath: defaultWorkspaceRootURL(title: title).path(percentEncoded: false),
         selectedRepositoryIDs: Set(candidates.map(\.id))
       )
-      return .none
+      return workspaceBaseRefsEffect(for: candidates)
 
     case .promptCanceled, .promptDismissed:
       state.workspaceCreationPrompt = nil
       return .cancel(id: CancelID.workspaceCreation)
+
+    case .refreshBaseRefs(let repositoryID):
+      guard let repository = state.workspaceCreationPrompt?.repositories[id: repositoryID] else {
+        return .none
+      }
+      return workspaceBaseRefsEffect(for: [repository])
+
+    case .baseRefsLoaded(let repositoryID, let sourceKind, let sourceLocation, let options, let defaultBaseRef):
+      guard var repository = state.workspaceCreationPrompt?.repositories[id: repositoryID],
+        repository.sourceKind == sourceKind,
+        repository.sourceLocation == sourceLocation
+      else {
+        return .none
+      }
+      var baseRefOptions = options
+      let baseRef = Self.trimmedNonEmpty(repository.baseRef)
+      if let baseRef {
+        baseRefOptions = ProjectWorkspaceCreationRepository.normalizedBaseRefOptions([baseRef] + baseRefOptions)
+      }
+      repository.baseRefOptions = baseRefOptions
+      if baseRef == nil {
+        repository.baseRef = defaultBaseRef
+      }
+      state.workspaceCreationPrompt?.repositories[id: repositoryID] = repository
+      return .none
 
     case .createWorkspace(let draft):
       state.workspaceCreationPrompt?.isCreating = true
@@ -126,5 +151,79 @@ extension RepositoriesFeature {
       suffix += 1
     }
     return candidateURL.standardizedFileURL
+  }
+
+  private static func trimmedNonEmpty(_ value: String?) -> String? {
+    guard let value else {
+      return nil
+    }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func workspaceBaseRefsEffect(for repositories: [ProjectWorkspaceCreationRepository]) -> Effect<Action> {
+    guard !repositories.isEmpty else {
+      return .none
+    }
+    let gitClient = gitClient
+    return .run { send in
+      for repository in repositories {
+        let result = await Self.workspaceBaseRefs(for: repository, gitClient: gitClient)
+        await send(
+          .workspaceCreation(
+            .baseRefsLoaded(
+              repositoryID: repository.id,
+              sourceKind: repository.sourceKind,
+              sourceLocation: repository.sourceLocation,
+              options: result.options,
+              defaultBaseRef: result.defaultBaseRef
+            )
+          )
+        )
+      }
+    }
+  }
+
+  private static func workspaceBaseRefs(
+    for repository: ProjectWorkspaceCreationRepository,
+    gitClient: GitClientDependency
+  ) async -> (options: [String], defaultBaseRef: String?) {
+    switch repository.sourceKind {
+    case .remote:
+      return (ProjectWorkspaceCreationRepository.commonRemoteBaseRefOptions, nil)
+
+    case .existingPath, .localRepository, .bareRepository:
+      guard let sourceURL = repository.localSourceURL else {
+        let options = ProjectWorkspaceCreationRepository.baseRefOptions(
+          automaticBaseRef: nil,
+          refs: [],
+          sourceKind: repository.sourceKind
+        )
+        return (options, nil)
+      }
+
+      let repositoryURL: URL
+      if repository.sourceKind == .bareRepository {
+        repositoryURL = sourceURL
+      } else {
+        repositoryURL = (try? await gitClient.repoRoot(sourceURL)) ?? sourceURL
+      }
+
+      let automaticBaseRef = await gitClient.automaticWorktreeBaseRef(repositoryURL)
+      let refs = (try? await gitClient.branchRefs(repositoryURL)) ?? []
+      let options = ProjectWorkspaceCreationRepository.baseRefOptions(
+        automaticBaseRef: automaticBaseRef,
+        refs: refs,
+        sourceKind: repository.sourceKind
+      )
+      let defaultBaseRef =
+        automaticBaseRef != nil || !refs.isEmpty
+        ? ProjectWorkspaceCreationRepository.preferredBaseRef(
+          automaticBaseRef: automaticBaseRef,
+          options: options
+        )
+        : nil
+      return (options, defaultBaseRef)
+    }
   }
 }

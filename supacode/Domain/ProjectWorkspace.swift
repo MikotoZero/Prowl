@@ -15,13 +15,16 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
   var sourceLocation: String
   var branchName: String?
   var baseRef: String?
+  var baseRefOptions: [String]
 
   init(
     id: String,
     name: String,
     rootURL: URL,
     branchName: String? = nil,
-    path: String? = nil
+    path: String? = nil,
+    baseRef: String? = nil,
+    baseRefOptions: [String] = []
   ) {
     let normalizedURL = rootURL.standardizedFileURL
     self.id = id
@@ -30,7 +33,8 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     sourceKind = .existingPath
     sourceLocation = normalizedURL.path(percentEncoded: false)
     self.branchName = branchName
-    baseRef = nil
+    self.baseRef = baseRef
+    self.baseRefOptions = Self.normalizedBaseRefOptions(baseRefOptions)
   }
 
   init(
@@ -40,7 +44,8 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     sourceLocation: String,
     branchName: String? = nil,
     baseRef: String? = nil,
-    path: String? = nil
+    path: String? = nil,
+    baseRefOptions: [String] = []
   ) {
     self.id = id
     self.name = name
@@ -49,6 +54,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     self.sourceLocation = sourceLocation
     self.branchName = branchName
     self.baseRef = baseRef
+    self.baseRefOptions = Self.normalizedBaseRefOptions(baseRefOptions)
   }
 
   var localSourceURL: URL? {
@@ -62,6 +68,50 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     case .remote:
       return nil
     }
+  }
+
+  nonisolated static let commonRemoteBaseRefOptions = ["main", "master", "origin/main", "origin/master"]
+
+  nonisolated static func baseRefOptions(
+    automaticBaseRef: String?,
+    refs: [String],
+    sourceKind: ProjectWorkspaceRepositorySourceKind
+  ) -> [String] {
+    var values: [String] = []
+    if let automaticBaseRef {
+      values.append(automaticBaseRef)
+    }
+    switch sourceKind {
+    case .remote:
+      values += commonRemoteBaseRefOptions
+    case .existingPath, .localRepository, .bareRepository:
+      values += ["main", "master", "origin/main", "origin/master"]
+    }
+    values += refs
+    return normalizedBaseRefOptions(values)
+  }
+
+  nonisolated static func preferredBaseRef(automaticBaseRef: String?, options: [String]) -> String? {
+    if let automaticBaseRef,
+      !automaticBaseRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    {
+      return automaticBaseRef
+    }
+    return ["main", "master", "origin/main", "origin/master"].first { options.contains($0) }
+      ?? options.first
+  }
+
+  nonisolated static func normalizedBaseRefOptions(_ values: [String]) -> [String] {
+    var seen = Set<String>()
+    var result: [String] = []
+    for value in values {
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty, seen.insert(trimmed).inserted else {
+        continue
+      }
+      result.append(trimmed)
+    }
+    return result
   }
 }
 

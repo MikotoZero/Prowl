@@ -721,6 +721,9 @@ extension RepositoriesFeature {
     case .workspaceCreationPrompt(.presented(.delegate(.cancel))):
       return .send(.workspaceCreation(.promptCanceled))
 
+    case .workspaceCreationPrompt(.presented(.delegate(.baseRefSourceChanged(let repositoryID)))):
+      return .send(.workspaceCreation(.refreshBaseRefs(repositoryID)))
+
     case .workspaceCreationPrompt(.presented(.delegate(.submit(let draft)))):
       return .send(.workspaceCreation(.createWorkspace(draft)))
 
