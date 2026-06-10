@@ -101,6 +101,11 @@ struct AppearanceSettingsView: View {
             isOn: $store.showActiveAgentTabTitles
           )
           .help("Display each agent's tab title in the row and show the branch name on hover.")
+          Toggle(
+            "Show agent status in Shelf tabs",
+            isOn: $store.showActiveAgentStatusInShelf
+          )
+          .help("Overlay detected agent status on the owning tab icon in Shelf View.")
         }
         Section("Default View") {
           Picker("Launch in", selection: $store.defaultViewMode) {

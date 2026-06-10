@@ -128,7 +128,11 @@ struct ActiveAgentsFeature {
     max(minimumPanelHeight, min(maximumPanelHeight, height - reservedSidebarListHeight))
   }
 
-  static func detectionEnabled(isPanelHidden: Bool, autoShowPanel: Bool) -> Bool {
-    !isPanelHidden || autoShowPanel
+  static func detectionEnabled(
+    isPanelHidden: Bool,
+    autoShowPanel: Bool,
+    isShelfVisible: Bool
+  ) -> Bool {
+    isShelfVisible || !isPanelHidden || autoShowPanel
   }
 }

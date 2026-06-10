@@ -54,6 +54,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `dimUnfocusedSplits` | Bool | `true` | Dim panes that aren't focused. |
 | `autoShowActiveAgentsPanel` | Bool | `false` | Auto-open the Active Agents panel on a new agent. |
 | `showActiveAgentTabTitles` | Bool | `false` | Show tab titles (vs. branch) in the agents panel. |
+| `showActiveAgentStatusInShelf` | Bool | `true` | Show agent status markers on Shelf tab icons. |
 | `windowTintMode` | enum (`none`/`repositoryColor`/`custom`) | `repositoryColor` | How the window chrome is tinted. |
 | `windowTintCustomColor` | color | default | The custom tint color (when `windowTintMode = custom`). |
 | `showRunButtonInToolbar` | Bool | `true` | Show the Run Script button in the toolbar. |

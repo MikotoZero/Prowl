@@ -116,7 +116,7 @@ struct BaguaWorkingIndicator: View {
 }
 
 extension AgentDisplayState {
-  fileprivate var label: String {
+  var label: String {
     switch self {
     case .working:
       return "Working"
@@ -129,7 +129,7 @@ extension AgentDisplayState {
     }
   }
 
-  fileprivate var foregroundStyle: Color {
+  var foregroundStyle: Color {
     switch self {
     case .working:
       return .orange

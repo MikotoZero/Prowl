@@ -378,6 +378,48 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func selectPreviousShelfBookWrapsAround() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo",
+      name: "main",
+      detail: "",
+      workingDirectory: rootURL,
+      repositoryRootURL: rootURL
+    )
+    let wt2 = Worktree(
+      id: "/tmp/repo/feature",
+      name: "feature",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/feature"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repo.id]
+    state.selection = .worktree(wt1.id)  // Currently on the first book.
+    state.openedWorktreeIDs = [wt1.id, wt2.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectPreviousShelfBook)
+    // Wrapping: previous-before-first lands on the last book.
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+      $0.pendingTerminalFocusWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
   @Test(.dependencies) func selectNextWorktreeRoutesToTabNavigationInShelf() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let wt1 = Worktree(
@@ -440,6 +482,27 @@ struct ShelfFeatureTests {
     await store.send(.selectPreviousWorktree)
     await store.finish()
     #expect(sentCommands.value == [.performBindingAction(wt1, action: "previous_tab")])
+  }
+
+  @Test func shelfSwipeGestureClassifierMapsAxesToShelfNavigation() {
+    #expect(
+      ShelfSwipeGestureClassifier.action(accumulatedDeltaX: -90, accumulatedDeltaY: 10) == .nextBook
+    )
+    #expect(
+      ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 90, accumulatedDeltaY: 10) == .previousBook
+    )
+    #expect(
+      ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 10, accumulatedDeltaY: -90) == .nextTab
+    )
+    #expect(
+      ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 10, accumulatedDeltaY: 90) == .previousTab
+    )
+  }
+
+  @Test func shelfSwipeGestureClassifierIgnoresSmallOrAmbiguousScrolls() {
+    #expect(ShelfSwipeGestureClassifier.action(accumulatedDeltaX: -79, accumulatedDeltaY: 0) == nil)
+    #expect(ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 60, accumulatedDeltaY: 60) == nil)
+    #expect(ShelfSwipeGestureClassifier.action(accumulatedDeltaX: 90, accumulatedDeltaY: 70) == nil)
   }
 
   @Test(.dependencies) func worktreeHistoryIsUnavailableWhileShelfIsActive() async {

@@ -102,6 +102,74 @@ struct AppFeatureSettingsChangedTests {
     }
   }
 
+  @Test(.dependencies) func syncAgentDetectionKeepsDetectionEnabledWhenShelfVisible() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = false
+    var state = AppFeature.State(settings: settings)
+    state.repositories.repositories = [repository]
+    state.repositories.isShelfActive = true
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = true }
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.syncAgentDetectionEnabled)
+    await store.finish()
+
+    #expect(sentTerminalCommands.value == [.setAgentDetectionEnabled(true)])
+  }
+
+  @Test(.dependencies) func syncAgentDetectionDisablesShelfOnlyDetectionWhenShelfStatusOptedOut() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = false
+    settings.showActiveAgentStatusInShelf = false
+    var state = AppFeature.State(settings: settings)
+    state.repositories.repositories = [repository]
+    state.repositories.isShelfActive = true
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = true }
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.syncAgentDetectionEnabled)
+    await store.finish()
+
+    #expect(sentTerminalCommands.value == [.setAgentDetectionEnabled(false)])
+  }
+
+  @Test func repositoryListChangesTriggerShelfVisibilityResync() {
+    // `isShowingShelf` requires a non-empty repository list, so adding or
+    // removing repositories must resync detection even though `isShelfActive`
+    // is untouched.
+    #expect(
+      AppFeature.repositoriesActionMayChangeShelfVisibility(
+        .repositoryManagement(.repositoryRemoved("/tmp/repo", selectionWasRemoved: false))
+      )
+    )
+    #expect(
+      AppFeature.repositoriesActionMayChangeShelfVisibility(
+        .repositoriesLoaded([], failures: [], roots: [], animated: false)
+      )
+    )
+    #expect(
+      !AppFeature.repositoriesActionMayChangeShelfVisibility(.selectNextShelfBook)
+    )
+  }
+
   @Test func appStateInitializesActiveAgentTabTitleDisplayFromSettings() {
     var settings = SettingsFeature.State()
     settings.showActiveAgentTabTitles = true
@@ -182,6 +250,25 @@ struct AppFeatureSettingsChangedTests {
       rawState: .working,
       displayState: .working,
       lastChangedAt: Date(timeIntervalSince1970: 10)
+    )
+  }
+
+  private func makeWorktree() -> Worktree {
+    Worktree(
+      id: "/tmp/repo/wt-1",
+      name: "wt-1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-1"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+  }
+
+  private func makeRepository(worktrees: [Worktree]) -> Repository {
+    Repository(
+      id: "/tmp/repo",
+      rootURL: URL(fileURLWithPath: "/tmp/repo"),
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: worktrees)
     )
   }
 

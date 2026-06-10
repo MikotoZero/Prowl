@@ -93,6 +93,7 @@ struct SettingsFilePersistenceTests {
       $settings.withLock {
         $0.global.shelfSpineTintFallback = .systemTint
         $0.global.shelfSpineTintFollowsRepositoryColor = false
+        $0.global.showActiveAgentStatusInShelf = false
       }
     }
 
@@ -105,6 +106,7 @@ struct SettingsFilePersistenceTests {
 
     #expect(reloaded.global.shelfSpineTintFallback == .systemTint)
     #expect(reloaded.global.shelfSpineTintFollowsRepositoryColor == false)
+    #expect(reloaded.global.showActiveAgentStatusInShelf == false)
   }
 
   @Test(.dependencies) func invalidJSONResetsToDefaults() throws {
@@ -169,6 +171,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.showDefaultEditorInToolbar == true)
     #expect(settings.global.dockBounceMode == .off)
     #expect(settings.global.showNotificationDotOnDock == false)
+    #expect(settings.global.showActiveAgentStatusInShelf == true)
     #expect(settings.global.shelfSpineTintFallback == .neutral)
     #expect(settings.global.shelfSpineTintFollowsRepositoryColor == true)
     #expect(settings.repositoryRoots.isEmpty)

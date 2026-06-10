@@ -56,6 +56,8 @@ When nothing is running: "New agents will appear here".
 
 - `autoShowActiveAgentsPanel` — pop the panel open when an agent appears.
 - `showActiveAgentTabTitles` — show each agent's tab title instead of its branch.
+- `showActiveAgentStatusInShelf` — show detected agent status markers on Shelf
+  tab icons.
 - Panel height and hidden/shown state are persisted automatically.
 
 ## Relationship to other features
@@ -66,6 +68,10 @@ When nothing is running: "New agents will appear here".
   events — which usually coincides with, but is not the same as, a detected finish.
 - **Canvas** ([canvas](canvas.md)) is the spatial counterpart — cards light up on
   that same notification/unread signal, not on the detected status itself.
+- **Shelf** ([shelf](shelf.md)) mirrors detected agents as status markers on
+  each owning tab icon; clicking a marked tab uses the same jump-to-agent behavior
+  as clicking a panel row. This can be turned off with
+  `showActiveAgentStatusInShelf`.
 
 ## Gotchas for agents
 

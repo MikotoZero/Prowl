@@ -30,6 +30,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var dimUnfocusedSplits: Bool
   var autoShowActiveAgentsPanel: Bool
   var showActiveAgentTabTitles: Bool
+  var showActiveAgentStatusInShelf: Bool
   var windowTintMode: WindowTintMode
   var windowTintCustomColor: TintColor
   var showRunButtonInToolbar: Bool
@@ -71,6 +72,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dimUnfocusedSplits: true,
     autoShowActiveAgentsPanel: false,
     showActiveAgentTabTitles: false,
+    showActiveAgentStatusInShelf: true,
     windowTintMode: .repositoryColor,
     windowTintCustomColor: .default,
     showRunButtonInToolbar: true,
@@ -113,6 +115,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dimUnfocusedSplits: Bool = true,
     autoShowActiveAgentsPanel: Bool = false,
     showActiveAgentTabTitles: Bool = false,
+    showActiveAgentStatusInShelf: Bool = true,
     windowTintMode: WindowTintMode = .repositoryColor,
     windowTintCustomColor: TintColor = .default,
     showRunButtonInToolbar: Bool = true,
@@ -153,6 +156,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.dimUnfocusedSplits = dimUnfocusedSplits
     self.autoShowActiveAgentsPanel = autoShowActiveAgentsPanel
     self.showActiveAgentTabTitles = showActiveAgentTabTitles
+    self.showActiveAgentStatusInShelf = showActiveAgentStatusInShelf
     self.windowTintMode = windowTintMode
     self.windowTintCustomColor = windowTintCustomColor
     self.showRunButtonInToolbar = showRunButtonInToolbar
@@ -196,6 +200,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(dimUnfocusedSplits, forKey: .dimUnfocusedSplits)
     try container.encode(autoShowActiveAgentsPanel, forKey: .autoShowActiveAgentsPanel)
     try container.encode(showActiveAgentTabTitles, forKey: .showActiveAgentTabTitles)
+    try container.encode(showActiveAgentStatusInShelf, forKey: .showActiveAgentStatusInShelf)
     try container.encode(windowTintMode, forKey: .windowTintMode)
     try container.encode(windowTintCustomColor, forKey: .windowTintCustomColor)
     try container.encode(showRunButtonInToolbar, forKey: .showRunButtonInToolbar)
@@ -238,6 +243,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case dimUnfocusedSplits
     case autoShowActiveAgentsPanel
     case showActiveAgentTabTitles
+    case showActiveAgentStatusInShelf
     case windowTintMode
     case windowTintCustomColor
     case showRunButtonInToolbar
@@ -339,6 +345,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showActiveAgentTabTitles =
       try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentTabTitles)
       ?? Self.default.showActiveAgentTabTitles
+    showActiveAgentStatusInShelf =
+      try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentStatusInShelf)
+      ?? Self.default.showActiveAgentStatusInShelf
     (windowTintMode, windowTintCustomColor) = try Self.decodeWindowTint(from: container)
     (shelfSpineTintFallback, shelfSpineTintFollowsRepositoryColor) = try Self.decodeShelfSpineTint(from: container)
     let toolbarAndDock = try Self.decodeToolbarAndDockSettings(from: container)
