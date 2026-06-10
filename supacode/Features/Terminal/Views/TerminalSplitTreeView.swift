@@ -243,7 +243,7 @@ struct TerminalSplitTreeView: View {
         .font(.callout.weight(.semibold))
         .foregroundStyle(.primary)
         .padding(5)
-        .background(.regularMaterial, in: .circle)
+        .background(.regularMaterial, in: .rect(cornerRadius: 6))
       }
       .buttonStyle(.plain)
       .help(
