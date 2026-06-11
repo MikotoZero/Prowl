@@ -33,8 +33,7 @@ root; "not a git repository" → plain folder).
 
 - **Shortcut:** `⌘⇧O` (`open_repository`)
 - **Toolbar:** the **Add Repository** button (folder-with-plus icon) at the top of
-  the sidebar. Clicking runs Add Repository directly; its attached menu holds
-  **New Workspace**.
+  the sidebar, next to **New Workspace** (person-in-folder icon).
 - **Command Palette:** "Open Repository".
 
 Pick one or more directories. Prowl detects git vs plain, de-duplicates, and

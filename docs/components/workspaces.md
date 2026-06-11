@@ -18,9 +18,9 @@ When you open a workspace in Prowl:
 
 ## Folder layout
 
-Use **New Workspace** from the sidebar toolbar (the menu attached to the **Add
-Repository** button), the Worktrees menu, or the command palette to create a
-workspace. Prowl creates the shared folder, materializes the
+Use **New Workspace** from the sidebar toolbar (the
+person-in-folder button next to **Add Repository**), the Worktrees menu, or the
+command palette to create a workspace. Prowl creates the shared folder, materializes the
 selected repositories, writes `.prowl/workspace.json`, and opens the workspace
 as a runnable folder. A workspace needs at least two repositories.
 
