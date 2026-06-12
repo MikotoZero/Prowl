@@ -70,6 +70,7 @@ struct CommandPaletteFeature {
     case renameBranch
     case openRepositorySettings(Repository.ID)
     case runCustomCommand(Int)
+    case handoffToAgent(String)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -262,6 +263,7 @@ struct CommandPaletteFeature {
       )
     }
     items.append(contentsOf: customCommandItems(customCommands))
+    items.append(contentsOf: handoffCommandItems(repositories))
     if let terminalWorktree = repositories.selectedTerminalWorktree {
       items.append(
         CommandPaletteItem(
@@ -521,6 +523,27 @@ private func customCommandItems(_ commands: [UserCustomCommand]) -> [CommandPale
       keywords: ["custom", "command", "script"]
     )
   }
+}
+
+/// Hand-off actions, shown only when the selected runnable target is a workspace.
+private func handoffCommandItems(_ repositories: RepositoriesFeature.State) -> [CommandPaletteItem] {
+  guard repositories.selectedRepository?.isWorkspace == true else { return [] }
+  return [
+    handoffCommandItem(agent: "claude", title: "Hand off → Claude Code"),
+    handoffCommandItem(agent: "codex", title: "Hand off → Codex"),
+  ]
+}
+
+private func handoffCommandItem(agent: String, title: String) -> CommandPaletteItem {
+  CommandPaletteItem(
+    id: CommandPaletteItemID.handoffToAgent(agent),
+    title: title,
+    subtitle: "Refresh handoff, archive, and launch in a new tab",
+    kind: .handoffToAgent(agent),
+    category: .terminal,
+    defaultSuggestion: false,
+    keywords: ["handoff", "hand off", "switch agent", "takeover", agent]
+  )
 }
 
 private func customCommandSubtitle(for command: UserCustomCommand) -> String {
