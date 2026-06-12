@@ -330,6 +330,18 @@ struct SupacodeApp: App {
         else { return nil }
         return state.activeSurfaceID(for: tabID)
       },
+      handoffSessionContext: { worktreeID in
+        guard let state = terminalManager.stateIfExists(for: worktreeID),
+          let tabID = state.tabManager.selectedTabId,
+          let surfaceID = state.activeSurfaceID(for: tabID)
+        else { return nil }
+        return makeHandoffSessionContext(
+          worktreeID: worktreeID,
+          paneID: surfaceID,
+          paneTitle: nil,
+          terminalManager: terminalManager
+        )
+      },
       latestUnreadNotification: {
         terminalManager.latestUnreadNotificationLocation()
       },
@@ -342,6 +354,31 @@ struct SupacodeApp: App {
       markNotificationsReadForSurface: { worktreeID, surfaceID in
         terminalManager.markNotificationsRead(worktreeID: worktreeID, surfaceID: surfaceID)
       }
+    )
+  }
+
+  private static func makeHandoffSessionContext(
+    worktreeID: Worktree.ID,
+    paneID: UUID,
+    paneTitle: String?,
+    terminalManager: WorktreeTerminalManager
+  ) -> HandoffStore.SessionContext? {
+    guard let state = terminalManager.stateIfExists(for: worktreeID),
+      let surface = state.surfaceView(for: paneID)
+    else {
+      return nil
+    }
+
+    let detectedAgent = state.surfaceAgentStates[paneID]?.detectedAgent?.rawValue
+    let title = paneTitle ?? state.paneTitle(surfaceID: paneID, fallbackTabTitle: "")
+    let screenText = surface.readScreenContentsForCLI() ?? surface.readViewportContentsForCLI()
+    return HandoffStore.SessionContext(
+      agent: detectedAgent,
+      paneID: paneID.uuidString,
+      paneTitle: title.isEmpty ? nil : title,
+      source: screenText == nil ? "terminal-unavailable" : "terminal-scrollback",
+      confidence: "fallback",
+      excerptText: screenText
     )
   }
 
@@ -568,7 +605,13 @@ struct SupacodeApp: App {
             worktreeName: resolved.worktreeName,
             rootPath: resolved.worktreeRootPath,
             paneID: resolved.paneID.uuidString,
-            outgoingAgent: agent
+            outgoingAgent: agent,
+            sessionContext: makeHandoffSessionContext(
+              worktreeID: resolved.worktreeID,
+              paneID: resolved.paneID,
+              paneTitle: resolved.paneTitle,
+              terminalManager: terminalManager
+            )
           )
         }
       },
