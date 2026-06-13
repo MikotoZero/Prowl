@@ -65,69 +65,33 @@ disown
 
 Then wait for the socket in the reusable setup block as usual.
 
+If the socket appears but `prowl_debug list --json` returns `APP_NOT_RUNNING`, the app likely exited and left a stale socket/lock behind. Remove both socket files, confirm no debug `ProwlApp` PID is still alive, then relaunch. In agent sessions where the direct binary exits immediately, use a PTY-backed `PROWL_CLI_SOCKET=/tmp/prowl-self-verify.sock make run-app` session instead.
+
 When `PROWL_CLI_SOCKET` is set, CLI auto-launch is disabled. The debug app and every CLI invocation must use the same socket value.
 
 The debug app shares the installed app's `~/Library` data, so it loads the real repository list and looks identical to the installed window; never identify the debug instance by appearance. Target it by socket plus pane or tab UUID.
 
 ## Reusable Shell Setup
 
-Paste this block at the top of each shell command after the debug app has started. Because the socket path is fixed, no file reads or variable recovery are needed:
+Available script:
+
+- `scripts/helpers.sh` — Source-only helpers for the dedicated socket, tolerant JSON parsing, debug PID lookup, health checks, and PID-scoped screenshots.
+
+Use the bundled helper script instead of re-pasting shell functions. Source it after the debug app has started, then run its health check before driving the app:
 
 ```bash
-socket="/tmp/prowl-self-verify.sock"
-cli="./.build/debug/prowl"
-
-prowl_debug() {
-  PROWL_CLI_SOCKET="$socket" "$cli" "$@"
-}
-
-# List all debug-build ProwlApp PIDs (may include helper/child processes).
-debug_pids() {
-  for pid in $(pgrep -f "DerivedData/.*/Debug/Prowl.app/Contents/MacOS/ProwlApp"); do
-    [ "$(ps -p "$pid" -o comm= 2>/dev/null | sed 's#.*/##')" = "ProwlApp" ] && echo "$pid"
-  done
-}
-
-# Return the single debug PID that owns a visible window.
-# macOS apps can fork helper processes that match the same path but have no
-# windows; always use this for screenshot and window-level operations.
-debug_pid_with_window() {
-  local script='/tmp/prowl-self-verify/winid_check.swift'
-  mkdir -p /tmp/prowl-self-verify
-  cat > "$script" <<'SWIFT'
-import CoreGraphics
-import Foundation
-let pid = Int32(CommandLine.arguments[1]) ?? -1
-let list = (CGWindowListCopyWindowInfo([.excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
-for w in list where (w[kCGWindowOwnerPID as String] as? Int32) == pid {
-  if w[kCGWindowNumber as String] is Int { print(pid); break }
-}
-SWIFT
-  for pid in $(debug_pids); do
-    swift "$script" "$pid" 2>/dev/null | grep -q . && echo "$pid" && return
-  done
-}
-
-# Parse prowl --json output tolerantly. Terminal text can contain raw control
-# characters (U+0000–U+001F) that break jq. This helper accepts a jq filter
-# and uses Python to absorb the control characters before passing to jq.
-# Usage: echo "$json" | prowl_jq '.data.text'
-prowl_jq() {
-  python3 -c "
-import sys, json, subprocess
-d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
-subprocess.run(['jq'] + sys.argv[1:], input=json.dumps(d, ensure_ascii=False), text=True)
-" "$@"
-}
-
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  [ -S "$socket" ] && break
-  sleep 1
-done
-test -S "$socket"
+. .claude/skills/self-verify-prowl/scripts/helpers.sh
+wait_for_prowl_debug
 ```
 
-Use `prowl_debug ...` for all CLI commands below. Keep `PROWL_CLI_SOCKET` explicit if you inline commands instead of using the helper.
+For each later shell command, source the helper and rerun the health check before driving the app:
+
+```bash
+. .claude/skills/self-verify-prowl/scripts/helpers.sh
+wait_for_prowl_debug
+```
+
+Use `prowl_debug ...`, `prowl_jq ...`, and `debug_window_id` from `scripts/helpers.sh` for the commands below. Keep `PROWL_CLI_SOCKET` explicit if you inline commands instead of using the helper.
 
 When parsing `--json` output that may contain terminal text, use `prowl_jq` instead of `jq` to avoid control-character parse failures (see [#444](https://github.com/onevcat/Prowl/issues/444)).
 
@@ -208,29 +172,16 @@ If the scenario uses another agent, keep it scoped and reversible. Short non-int
 
 `prowl` is the primary control surface, but it cannot verify every visual detail. Use a screenshot when CLI output cannot prove the behavior.
 
-Capture only the debug app's window, not the whole screen. The current Prowl session usually sits in front of the debug instance, so a full-screen `screencapture -x` would show the wrong window. Use `debug_pid_with_window` from the reusable setup block to find the PID that actually owns a window, then resolve its window id:
+Capture only the debug app's window, not the whole screen. The current Prowl session usually sits in front of the debug instance, so a full-screen `screencapture -x` would show the wrong window. Use `debug_window_id` from the reusable setup block to resolve a PID-scoped window id:
 
 ```bash
-mkdir -p /tmp/prowl-self-verify
-debug_pid="$(debug_pid_with_window)"
-test -n "$debug_pid"
-cat > /tmp/prowl-self-verify/winid.swift <<'SWIFT'
-import CoreGraphics
-import Foundation
-let pid = Int32(CommandLine.arguments[1]) ?? -1
-let list = (CGWindowListCopyWindowInfo([.excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
-for w in list where (w[kCGWindowOwnerPID as String] as? Int32) == pid {
-  if let n = w[kCGWindowNumber as String] as? Int, let name = w[kCGWindowName as String] as? String, !name.isEmpty {
-    print(n); break
-  }
-}
-SWIFT
-wid="$(swift /tmp/prowl-self-verify/winid.swift "$debug_pid" | head -1)"
+. .claude/skills/self-verify-prowl/scripts/helpers.sh
+wid="$(debug_window_id)"
 test -n "$wid"
 screencapture -o -l"$wid" /tmp/prowl-self-verify/prowl-debug-window.png
 ```
 
-`debug_pid_with_window` iterates all debug PIDs and returns only the one that owns a visible window, avoiding helper/child processes that match the same binary path. `screencapture -o -l<windowid>` grabs just that window without its shadow. Then use `view_image` or another image inspection tool to review it.
+`debug_window_id` compiles its tiny CoreGraphics helper on first screenshot use and reuses it for later screenshots in the same run. `screencapture -o -l<windowid>` grabs just that window without its shadow. Then use `view_image` or another image inspection tool to review it.
 
 Browser or computer-use skills are useful for web and localhost targets, but do not provide reliable control over arbitrary macOS apps. Prefer the Prowl CLI first, then a single-window screenshot for visual gaps.
 
