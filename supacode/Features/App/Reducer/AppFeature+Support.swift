@@ -166,6 +166,7 @@ extension AppFeature {
       defaultEditorID: normalizedDefaultEditorID,
       workingDirectory: workingDirectory
     )
+    state.openActionIsAutomatic = settings.openActionID == OpenWorktreeAction.automaticSettingsID
     state.selectedRunScript = settings.runScript
   }
 

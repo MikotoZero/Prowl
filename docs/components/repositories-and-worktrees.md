@@ -146,8 +146,10 @@ type is detected), it falls back to the generic priority — your first
 installed editor (Cursor → Zed → VS Code → Windsurf → …), falling through to
 Xcode and then **Finder only when no preferred app is found**. Use the
 **Open** dropdown in the worktree's detail toolbar to pick a different app
-(this pins it for the repo), or set a per-repo default (`openActionID`) /
-global default (`defaultEditorID`). Prowl detects: Finder, Terminal,
+(this pins it for the repo), or pick **Automatic** at the top of that dropdown
+to clear the pin and return to project-aware selection. You can also set a
+per-repo default (`openActionID`) / global default (`defaultEditorID`). Prowl
+detects: Finder, Terminal,
 `$EDITOR`, VS Code (+ Insiders), VSCodium, Cursor, Zed, Windsurf, Antigravity,
 Sublime Text, Xcode, Android Studio, JetBrains IDEs (IntelliJ IDEA, WebStorm,
 PyCharm, RustRover, Rider, GoLand, CLion, PhpStorm, RubyMine), GitHub Desktop
