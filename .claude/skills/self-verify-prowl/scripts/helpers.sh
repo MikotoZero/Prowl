@@ -70,18 +70,6 @@ debug_window_id() {
   "$tool" "$pid" | head -1
 }
 
-# Parse prowl --json output tolerantly. Terminal text can contain raw control
-# characters (U+0000-U+001F) that break jq. This helper accepts a jq filter
-# and uses Python to absorb the control characters before passing to jq.
-# Usage: echo "$json" | prowl_jq '.data.text'
-prowl_jq() {
-  python3 -c "
-import sys, json, subprocess
-d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
-subprocess.run(['jq'] + sys.argv[1:], input=json.dumps(d, ensure_ascii=False), text=True)
-" "$@"
-}
-
 wait_for_prowl_debug() {
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
     [ -S "$socket" ] && break
@@ -93,8 +81,8 @@ wait_for_prowl_debug() {
   # no-op CLI round trip before running scenario commands.
   test -n "$(debug_pids | head -1)" || return 1
   health="$(prowl_debug list --json)"
-  test "$(echo "$health" | prowl_jq -r '.ok')" = "true" || {
-    echo "$health" | prowl_jq -r '.error.code? // "unknown"'
+  test "$(echo "$health" | jq -r '.ok')" = "true" || {
+    echo "$health" | jq -r '.error.code? // "unknown"'
     return 1
   }
 }
