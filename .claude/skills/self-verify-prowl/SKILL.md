@@ -29,7 +29,7 @@ Do not use this as a replacement for unit tests, `make check`, `make build-app`,
 - Preserve unrelated user changes. Do not close or kill the user's normal Prowl app.
 - If the CLI changed, build and use the repo CLI, usually `./.build/debug/prowl`.
 - If the CLI did not change, an installed `prowl` may be usable, but the repo-built CLI keeps the app/CLI protocol aligned.
-- For detailed CLI targeting and recipes, consult the dedicated `prowl-cli` skill first when needed.
+- **Read the `prowl-cli` skill before writing any CLI commands.** It is the authoritative reference for JSON field names, targeting rules, quoting, argument semantics, error codes, and common pitfalls. This skill covers the self-verify workflow; `prowl-cli` covers how to use `prowl` correctly. Do not guess field names — get them from `prowl-cli`.
 
 ## Launch A Separate App
 
@@ -92,11 +92,21 @@ created="$(prowl_debug tab create --worktree "$worktree" --json)"
 pane="$(echo "$created" | jq -r '.data.target.pane.id')"
 tab="$(echo "$created" | jq -r '.data.target.tab.id')"
 
-prowl_debug send --pane "$pane" 'printf "SELF_VERIFY:%s\n" "$PWD"' --capture --timeout 30 --json
-prowl_debug read --pane "$pane" --last 80 --wait-stable --json
+prowl_debug send --pane "$pane" 'printf "SELF_VERIFY:%s\n" "$PWD"' --capture --timeout 30 --json \
+  | jq -r '.data.capture.text'
+prowl_debug read --pane "$pane" --last 80 --wait-stable --json \
+  | jq -r '.data.text'
 ```
 
 Prefer targeting by pane or tab UUIDs from JSON output. Avoid relying on titles when multiple Prowl instances or similar tabs exist.
+
+Key JSON fields (see `prowl-cli` skill for the full reference):
+
+- `read --json` → terminal text is `.data.text`, not `.content` or `.output`.
+- `send --capture --json` → captured output is `.data.capture.text`; exit code is `.data.wait.exit_code`.
+- `list --json` → pane list is `.data.items[]`, not `.worktrees[]`; each item has `.pane.id`, `.tab.id`, `.worktree.id`, `.task.status`.
+
+CLI JSON responses can contain terminal control characters (in `.pane.title` or `.data.text`) that cause `jq` to fail with a parse error. When this happens, use `python3 -c "import sys,json; d=json.loads(sys.stdin.read()); ..."` instead — Python's JSON parser tolerates embedded control characters.
 
 Always seed the debug instance with `prowl_debug open . --json` before expecting panes. A fresh debug app can start windowless and return an empty `list`; `open .` creates or focuses a worktree tab that later commands can target. Prefer creating an extra temporary tab for the scenario, then close that tab during cleanup.
 
@@ -114,11 +124,14 @@ Turn the change into one or more observable scenarios. Prefer small checks that 
 Example command scenario:
 
 ```bash
-prowl_debug send --pane "$pane" \
+result="$(prowl_debug send --pane "$pane" \
   'printf "SELF_VERIFY:%s\n" "$PWD"' \
-  --capture --timeout 30 --json
+  --capture --timeout 30 --json)"
+echo "$result" | jq -r '.data.capture.text'
+echo "$result" | jq -r '.data.wait.exit_code'
 
-prowl_debug read --pane "$pane" --last 80 --wait-stable --json
+prowl_debug read --pane "$pane" --last 80 --wait-stable --json \
+  | jq -r '.data.text'
 ```
 
 Example long-running scenario:
@@ -128,7 +141,8 @@ prowl_debug send --pane "$pane" \
   'for i in 1 2 3; do echo "SELF_VERIFY_STEP:$i"; sleep 1; done' \
   --no-wait --json
 
-prowl_debug read --pane "$pane" --last 120 --json
+prowl_debug read --pane "$pane" --last 120 --json \
+  | jq -r '.data.text'
 ```
 
 If the scenario uses another agent, keep it scoped and reversible. Short non-interactive agent tasks can finish before they are sampled; use an interactive session only when the behavior under test requires observing an active retained pane.
