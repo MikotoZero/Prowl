@@ -18,58 +18,103 @@ struct PaneAgentStateTests {
     #expect(state.displayState == .idle)
   }
 
-  @Test func claudeWorkingIsStickyForShortIdleGap() {
+  @Test(arguments: [DetectedAgent.claude, .codex, .gemini])
+  func workingIsStickyForShortIdleGap(agent: DetectedAgent) {
     let now = Date(timeIntervalSince1970: 100)
     var lastWorking: Date?
 
     let working = stabilizeAgentState(
-      agent: .claude,
+      agent: agent,
       previous: .idle,
       raw: .working,
       now: now,
-      lastClaudeWorkingAt: &lastWorking
+      lastWorkingAt: &lastWorking
     )
     #expect(working == .working)
 
     let stillWorking = stabilizeAgentState(
-      agent: .claude,
+      agent: agent,
       previous: .working,
       raw: .idle,
-      now: now.addingTimeInterval(0.4),
-      lastClaudeWorkingAt: &lastWorking
+      now: now.addingTimeInterval(2.9),
+      lastWorkingAt: &lastWorking
     )
     #expect(stillWorking == .working)
   }
 
-  @Test func claudeTransitionsToIdleAfterStickyWindow() {
+  @Test(arguments: [DetectedAgent.claude, .codex])
+  func transitionsToIdleAfterStickyWindow(agent: DetectedAgent) {
     let now = Date(timeIntervalSince1970: 100)
     var lastWorking: Date? = now
 
     let idle = stabilizeAgentState(
-      agent: .claude,
+      agent: agent,
       previous: .working,
       raw: .idle,
-      now: now.addingTimeInterval(1.201),
-      lastClaudeWorkingAt: &lastWorking
+      now: now.addingTimeInterval(3.001),
+      lastWorkingAt: &lastWorking
     )
 
     #expect(idle == .idle)
   }
 
-  @Test func nonClaudeDoesNotUseStickyWindow() {
+  @Test func blockedBypassesStickyWindow() {
     let now = Date(timeIntervalSince1970: 100)
     var lastWorking: Date? = now
 
-    let idle = stabilizeAgentState(
-      agent: .codex,
+    let blocked = stabilizeAgentState(
+      agent: .claude,
       previous: .working,
-      raw: .idle,
-      now: now,
-      lastClaudeWorkingAt: &lastWorking
+      raw: .blocked,
+      now: now.addingTimeInterval(0.3),
+      lastWorkingAt: &lastWorking
+    )
+
+    #expect(blocked == .blocked)
+  }
+
+  @Test func unknownObservationKeepsPreviousStateAndRefreshesHold() {
+    let now = Date(timeIntervalSince1970: 100)
+    var lastWorking: Date? = now
+    let later = now.addingTimeInterval(10)
+
+    let held = stabilizeAgentState(
+      agent: .claude,
+      previous: .working,
+      raw: .unknown,
+      now: later,
+      lastWorkingAt: &lastWorking
+    )
+
+    #expect(held == .working)
+    #expect(lastWorking == later)
+
+    var noHistory: Date?
+    let idle = stabilizeAgentState(
+      agent: .claude,
+      previous: .idle,
+      raw: .unknown,
+      now: later,
+      lastWorkingAt: &noHistory
     )
 
     #expect(idle == .idle)
-    #expect(lastWorking == nil)
+    #expect(noHistory == nil)
+  }
+
+  @Test func unknownObservationWithoutHistoryStaysUnknown() {
+    let now = Date(timeIntervalSince1970: 100)
+    var lastWorking: Date?
+
+    let unknown = stabilizeAgentState(
+      agent: .claude,
+      previous: .unknown,
+      raw: .unknown,
+      now: now,
+      lastWorkingAt: &lastWorking
+    )
+
+    #expect(unknown == .unknown)
   }
 
   @Test func presenceRequiresSixMissesBeforeRelease() {
