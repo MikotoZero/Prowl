@@ -1,6 +1,6 @@
 ---
 name: self-verify-prowl
-description: Bootstrap-verify Prowl changes by launching a debug app with a dedicated PROWL_CLI_SOCKET and driving it from the current Prowl session. Use after implementing Prowl app, terminal, Active Agents, or CLI changes when Codex should validate behavior end-to-end in a separate Prowl instance, including opening worktrees, creating tabs, running commands or agent sessions, reading panes, and falling back to screenshots or macOS Accessibility inspection when the prowl CLI is insufficient.
+description: Bootstrap-verify Prowl changes by launching a debug app with a dedicated PROWL_CLI_SOCKET and driving it from the current Prowl session. Use after implementing Prowl app, terminal, Active Agents, or CLI changes when Codex should validate behavior end-to-end in a separate Prowl instance, including opening worktrees, creating tabs, running commands or agent sessions, reading panes, and falling back to a single-window screenshot of the debug app when the prowl CLI is insufficient.
 ---
 
 # Self Verify Prowl
@@ -9,7 +9,7 @@ description: Bootstrap-verify Prowl changes by launching a debug app with a dedi
 
 Use this skill to validate a Prowl change from inside Prowl itself: start a freshly built debug app, point it at a temporary CLI socket, and use `prowl` from the current session to drive that separate app instance.
 
-Prefer `prowl` CLI operations because they are scriptable and leave useful evidence. When CLI coverage is not enough, use screenshots and macOS Accessibility inspection as secondary checks.
+Prefer `prowl` CLI operations because they are scriptable and leave useful evidence. When CLI coverage is not enough, fall back to a single-window screenshot of the debug app as a secondary check.
 
 ## When To Use
 
@@ -58,7 +58,7 @@ Then operate the debug app through the custom socket:
 ```bash
 PROWL_CLI_SOCKET="$socket" "$cli" open .
 PROWL_CLI_SOCKET="$socket" "$cli" list --json
-PROWL_CLI_SOCKET="$socket" "$cli" tab create --title "Self Verify" --json
+PROWL_CLI_SOCKET="$socket" "$cli" tab create --json
 PROWL_CLI_SOCKET="$socket" "$cli" send --pane "$pane" 'printf "SELF_VERIFY:%s\n" "$PWD"' --capture --timeout 30 --json
 PROWL_CLI_SOCKET="$socket" "$cli" read --pane "$pane" --last 80 --wait-stable --json
 ```
@@ -98,27 +98,29 @@ If the scenario uses another agent, keep it scoped and reversible. Short non-int
 
 ## Fallback Checks
 
-`prowl` is the primary control surface, but it cannot verify every visual or accessibility detail. Use fallbacks when CLI output cannot prove the behavior.
+`prowl` is the primary control surface, but it cannot verify every visual detail. Use a screenshot when CLI output cannot prove the behavior.
 
-For screenshots:
+Capture only the debug app's window, not the whole screen. The current Prowl session usually sits in front of the debug instance, so a full-screen `screencapture -x` would show the wrong window. Resolve the debug app's window id from its PID and capture just that window:
 
 ```bash
 mkdir -p /tmp/prowl-self-verify
-screencapture -x /tmp/prowl-self-verify/prowl-screen.png
+pid="$(ps aux | grep "Debug/Prowl.app/Contents/MacOS/Prowl" | grep -v grep | awk '{print $2}' | head -1)"
+cat > /tmp/prowl-self-verify/winid.swift <<'SWIFT'
+import CoreGraphics
+import Foundation
+let pid = Int32(CommandLine.arguments[1]) ?? -1
+let list = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+for w in list where (w[kCGWindowOwnerPID as String] as? Int32) == pid {
+  if let n = w[kCGWindowNumber as String] as? Int { print(n); break }
+}
+SWIFT
+wid="$(swift /tmp/prowl-self-verify/winid.swift "$pid" | head -1)"
+screencapture -o -l"$wid" /tmp/prowl-self-verify/prowl-debug-window.png
 ```
 
-Use `view_image` or another available image inspection tool when visual review matters.
+Match on the `Debug/Prowl.app` path so you target the debug instance, never the installed app. `screencapture -o -l<windowid>` grabs just that window without its shadow. Then use `view_image` or another image inspection tool to review it.
 
-For a shallow macOS Accessibility inspection:
-
-```bash
-osascript -e 'tell application "System Events" to tell process "Prowl" to get name of windows'
-osascript -e 'tell application "System Events" to tell process "Prowl" to get {role, subrole, name} of UI elements of window 1'
-```
-
-Accessibility inspection may require macOS Accessibility permission for the controlling process, and SwiftUI often exposes broad `AXHostingView` nodes rather than a rich semantic tree. Treat AX output as supporting evidence, not a complete substitute for CLI checks or direct screenshots.
-
-Browser or computer-use skills are useful for web and localhost targets, but they do not automatically provide reliable control over arbitrary macOS apps. Prefer Prowl CLI first, then screenshots or AX inspection for gaps.
+Browser or computer-use skills are useful for web and localhost targets, but do not provide reliable control over arbitrary macOS apps. Prefer the Prowl CLI first, then a single-window screenshot for visual gaps.
 
 ## Cleanup
 
@@ -128,9 +130,18 @@ Close tabs or panes created for verification:
 PROWL_CLI_SOCKET="$socket" "$cli" tab close --tab "$tab" --force --json
 ```
 
-Stop the `make run-app` session when validation is done. If you must terminate manually, target only the debug app launched from DerivedData and do not kill `/Applications/Prowl.app`.
+Stop the `make run-app` session when validation is done. If you must terminate manually, target only the debug app launched from DerivedData and do not kill `/Applications/Prowl.app`:
 
-Remove temporary screenshots or socket files when they are no longer useful.
+```bash
+pkill -f "DerivedData/.*/Debug/Prowl.app/Contents/MacOS/Prowl"
+```
+
+Remove the temporary files this skill created. The app never cleans up the custom socket or its lock: `CLISocketServer` only `unlink`s the socket on a clean `stop()` and never unlinks the `.lock` file at all, so a killed debug app leaves both `$socket` and `$socket.lock` behind. Delete them yourself, along with any screenshots:
+
+```bash
+rm -f "$socket" "$socket.lock"
+rm -rf /tmp/prowl-self-verify
+```
 
 ## Report Results
 
@@ -140,5 +151,5 @@ In the final report, include:
 - Which CLI binary was used and why.
 - The concrete CLI operations and agent tasks performed.
 - The relevant observed app or agent states.
-- Any screenshot or AX fallback evidence.
+- Any single-window screenshot evidence.
 - Cleanup performed and any remaining limitations.

@@ -100,6 +100,40 @@ prowl tab close --tab "$tab" --json
 prowl pane close --pane "$pane" --force --json
 ```
 
+## Parsing JSON Output
+
+Do not guess field names. Every `--json` response is `{ "ok", "command", "schema_version", "data": {...} }`, and the terminal text lives at `.data.text` — not `.content`, `.output`, or `.stdout`. Always parse with `jq` against the fields below; the authoritative, per-command field reference lives in `docs/components/cli.md`.
+
+```bash
+# read: rendered terminal text is .data.text
+prowl read --pane "$pane" --last 80 --wait-stable --json | jq -r '.data.text'
+
+# send --capture: captured output is .data.capture.text; exit code is .data.wait.exit_code
+out="$(prowl send --pane "$pane" 'git status --short' --capture --timeout 30 --json)"
+echo "$out" | jq -r '.data.capture.text'
+echo "$out" | jq -r '.data.wait.exit_code'
+
+# tab create / open: new pane and tab ids
+created="$(prowl tab create --worktree "$worktree" --json)"
+echo "$created" | jq -r '.data.target.pane.id'
+echo "$created" | jq -r '.data.target.tab.id'
+
+# list / agents: ids and status
+prowl list --json   | jq -r '.data.items[].pane.id'
+prowl list --json   | jq -r '.data.items[] | select(.pane.focused) | .pane.id'
+prowl agents --json | jq -r '.data.agents[] | "\(.status)\t\(.pane.id)"'
+
+# guard before trusting data: bail if ok is not true
+prowl list --json | jq -e '.ok == true' >/dev/null || echo "command failed"
+```
+
+Key fields by command (see `docs/components/cli.md` for the full contract):
+
+- `read` → `.data.text`, `.data.line_count`, `.data.truncated`, `.data.mode` (`snapshot`|`last`), `.data.source` (`screen`|`scrollback`|`mixed`), plus `.data.stabilized` / `.data.waited_ms` / `.data.samples` when `--wait-stable`.
+- `send` → `.data.input` (source/characters/bytes/trailing_enter_sent); `.data.wait.exit_code` and `.data.wait.duration_ms` when waiting; `.data.capture.text` / `.data.capture.line_count` / `.data.capture.truncated` when `--capture`.
+- `list` / `agents` → `.data.items[]` / `.data.agents[]`, each with `.pane.id`, `.tab.id`, `.worktree.{id,name,path}`, `.task.status`.
+- `tab create` / `open` → `.data.target.{pane,tab,worktree}`.
+
 ## Reading Agent Output
 
 `task.status` is useful for coordination but is not enough to prove the screen finished rendering. `idle` can arrive before a TUI has painted its final response.
@@ -218,6 +252,7 @@ Avoid outer double quotes around payloads containing `$PWD`, `$VAR`, backticks, 
 - `read --wait-stable` sees rendered screen only. It cannot recover content folded by a TUI.
 - `read` returning fewer lines than `--last` requested is normally `truncated: false` — the pane simply has less history and you already have it all, so do not retry for more. `truncated: true` flags a possibly-incomplete result (the full scrollback could not be read).
 - `send --capture` captures a screen diff; multiline input may include command echo.
+- Do not guess JSON field names. Terminal text is `.data.text` (read) and `.data.capture.text` (`send --capture`); see "Parsing JSON Output" and `docs/components/cli.md`.
 - `prowl list --json | jq ...` snippets should pass shell values with `--arg`.
 - In zsh, do not name variables `status`; it is readonly.
 - Parser errors are not JSON even if `--json` is present, because parsing happens before command execution.
