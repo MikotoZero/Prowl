@@ -65,27 +65,36 @@ PROWL_CLI_SOCKET="$socket" "$cli" read --pane "$pane" --last 80 --wait-stable --
 
 Prefer targeting by pane or tab UUIDs from JSON output. Avoid relying on titles when multiple Prowl instances or similar tabs exist.
 
-## Verify Active Agents
+## Run Observable Scenarios
 
-For Active Agents behavior, create a fresh tab or pane, start a small agent task, then query the roster:
+Turn the change into one or more observable scenarios. Prefer small checks that prove the behavior directly:
+
+- For command routing, run a command that prints the cwd, environment, or a unique marker.
+- For tab, pane, focus, or worktree behavior, create an isolated tab or pane and inspect `list --json` before and after the action.
+- For long-running task behavior, start a controlled command with visible output, then sample the pane with `read`.
+- For agent-specific behavior, start a short agent session and use `agents --json` only when the changed behavior involves the Active Agents roster.
+
+Example command scenario:
 
 ```bash
 PROWL_CLI_SOCKET="$socket" "$cli" send --pane "$pane" \
-  'codex --sandbox read-only "Reply exactly SELF_VERIFY_OK. Do not modify files."' \
-  --no-wait --json
+  'printf "SELF_VERIFY:%s\n" "$PWD"' \
+  --capture --timeout 30 --json
 
-PROWL_CLI_SOCKET="$socket" "$cli" agents --json
-PROWL_CLI_SOCKET="$socket" "$cli" agents --no-color
+PROWL_CLI_SOCKET="$socket" "$cli" read --pane "$pane" --last 80 --wait-stable --json
 ```
 
-Use the returned `data.agents[].pane.id` to inspect or control the agent's pane:
+Example long-running scenario:
 
 ```bash
-agent_pane="$(PROWL_CLI_SOCKET="$socket" "$cli" agents --json | jq -r '.data.agents[0].pane.id')"
-PROWL_CLI_SOCKET="$socket" "$cli" read --pane "$agent_pane" --last 120 --wait-stable --json
+PROWL_CLI_SOCKET="$socket" "$cli" send --pane "$pane" \
+  'for i in 1 2 3; do echo "SELF_VERIFY_STEP:$i"; sleep 1; done' \
+  --no-wait --json
+
+PROWL_CLI_SOCKET="$socket" "$cli" read --pane "$pane" --last 120 --json
 ```
 
-Short non-interactive agent tasks can finish before the roster is sampled. If the goal is to observe `working` to `idle` transitions or retained Active Agents entries, use an interactive agent session in a dedicated tab and sample `prowl agents` repeatedly.
+If the scenario uses another agent, keep it scoped and reversible. Short non-interactive agent tasks can finish before they are sampled; use an interactive session only when the behavior under test requires observing an active retained pane.
 
 ## Fallback Checks
 
