@@ -38,6 +38,34 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(error["code"] as? String, CLIErrorCode.appNotRunning)
   }
 
+  func testAgentsCommandRoundTripsOverSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "agents")
+    let response = try CommandResponse(
+      ok: true,
+      command: "agents",
+      schemaVersion: "prowl.cli.agents.v1",
+      data: RawJSON(encoding: AgentsResponseData(count: 0, agents: []))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["agents", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .agents = envelope.command {
+      // expected
+    } else {
+      XCTFail("Expected agents command envelope")
+    }
+
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, true)
+    XCTAssertEqual(payload["command"] as? String, "agents")
+  }
+
   func testOpenCommandRoundTripsOverSocket() throws {
     let socketPath = temporarySocketPath(suffix: "open")
     let response = try CommandResponse(
@@ -381,6 +409,80 @@ final class ProwlCLIIntegrationTests: XCTestCase {
 
     XCTAssertEqual(result.exitCode, 0)
     XCTAssertTrue(result.stdout.contains("No panes found."), "Expected empty message: \(result.stdout)")
+  }
+
+  func testAgentsCommandTextRenderingFromSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "agents-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "agents",
+      schemaVersion: "prowl.cli.agents.v1",
+      data: RawJSON(encoding: AgentsResponseData(
+        count: 3,
+        agents: [
+          makeAgentResponse(
+            id: "done-pane",
+            name: "codex",
+            status: "done",
+            projectName: "Prowl",
+            branch: "main",
+            tabTitle: "Done tab"
+          ),
+          makeAgentResponse(
+            id: "blocked-pane",
+            name: "omp",
+            status: "blocked",
+            projectName: "Prowl",
+            branch: "feature/cli-agents",
+            tabTitle: "issue 330"
+          ),
+          makeAgentResponse(
+            id: "working-pane",
+            name: "claude",
+            status: "working",
+            projectName: "Notes",
+            branch: "main",
+            tabTitle: "review"
+          ),
+        ]
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["agents"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let lines = result.stdout.split(separator: "\n").map(String.init)
+    XCTAssertEqual(lines.count, 3, "Unexpected agents output: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("Blocked"), "Expected blocked first: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("omp"), "Missing agent name: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("Prowl:feature/cli-agents"), "Missing project label: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("issue 330"), "Missing tab title: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("blocked-pane"), "Missing pane id: \(result.stdout)")
+    XCTAssertTrue(lines[1].contains("Working"), "Expected working second: \(result.stdout)")
+    XCTAssertTrue(lines[2].contains("Done"), "Expected done third: \(result.stdout)")
+  }
+
+  func testAgentsEmptyPayloadShowsNoAgentsFound() throws {
+    let socketPath = temporarySocketPath(suffix: "agents-empty")
+    let response = try CommandResponse(
+      ok: true,
+      command: "agents",
+      schemaVersion: "prowl.cli.agents.v1",
+      data: RawJSON(encoding: AgentsResponseData(count: 0, agents: []))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["agents"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("No agents found."), "Expected empty message: \(result.stdout)")
   }
 
   func testListMultipleWorktreesGroupedWithBlankLine() throws {
@@ -1349,6 +1451,34 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     PaneCommandPayload(action: action, target: makeTabTarget())
   }
 
+  private func makeAgentResponse(
+    id: String,
+    name: String,
+    status: String,
+    projectName: String,
+    branch: String,
+    tabTitle: String
+  ) -> AgentsResponseAgent {
+    AgentsResponseAgent(
+      id: id,
+      type: name,
+      name: name,
+      status: status,
+      rawState: status,
+      lastChangedAt: "2026-06-13T04:12:25Z",
+      project: AgentsResponseProject(name: projectName, branch: branch, path: "/Projects/\(projectName)"),
+      worktree: ListWorktree(
+        id: "\(projectName):/Projects/\(projectName)",
+        name: branch,
+        path: "/Projects/\(projectName)",
+        rootPath: "/Projects/\(projectName)",
+        kind: "git"
+      ),
+      tab: ListTab(id: "\(id)-tab", title: tabTitle, selected: true),
+      pane: AgentsResponsePane(id: id, index: 1, title: name, cwd: "/Projects/\(projectName)", focused: false)
+    )
+  }
+
   private func makeTabTarget() -> TabTarget {
     TabTarget(
       worktree: TabTargetWorktree(
@@ -1516,6 +1646,52 @@ private struct ListPane: Encodable {
 
 private struct ListTask: Encodable {
   let status: String?
+}
+
+private struct AgentsResponseData: Encodable {
+  let count: Int
+  let agents: [AgentsResponseAgent]
+}
+
+private struct AgentsResponseAgent: Encodable {
+  let id: String
+  let type: String
+  let name: String
+  let status: String
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case type
+    case name
+    case status
+    case rawState = "raw_state"
+    case lastChangedAt = "last_changed_at"
+    case project
+    case worktree
+    case tab
+    case pane
+  }
+
+  let rawState: String
+  let lastChangedAt: String
+  let project: AgentsResponseProject
+  let worktree: ListWorktree
+  let tab: ListTab
+  let pane: AgentsResponsePane
+}
+
+private struct AgentsResponseProject: Encodable {
+  let name: String
+  let branch: String
+  let path: String
+}
+
+private struct AgentsResponsePane: Encodable {
+  let id: String
+  let index: Int
+  let title: String
+  let cwd: String?
+  let focused: Bool
 }
 
 private struct FocusResponseData: Encodable {
