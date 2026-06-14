@@ -44,7 +44,8 @@ Clean up any stale socket from a previous run, then start the debug app in a per
 
 ```bash
 rm -f /tmp/prowl-self-verify.sock /tmp/prowl-self-verify.sock.lock
-PROWL_CLI_SOCKET=/tmp/prowl-self-verify.sock make run-app
+mkdir -p /tmp/prowl-self-verify
+PROWL_CLI_SOCKET=/tmp/prowl-self-verify.sock make run-app >/tmp/prowl-self-verify/run-app.log 2>&1
 ```
 
 Keep that command running in its own shell or PTY session for the whole validation run.
@@ -58,6 +59,28 @@ If the socket appears but `prowl_debug list --json` returns `APP_NOT_RUNNING`, t
 When `PROWL_CLI_SOCKET` is set, CLI auto-launch is disabled. The debug app and every CLI invocation must use the same socket value.
 
 The debug app shares the installed app's `~/Library` data, so it loads the real repository list and looks identical to the installed window; never identify the debug instance by appearance. Target it by socket plus pane or tab UUID.
+
+## Use The Run-App Log
+
+The `make run-app` log is the third verification surface, alongside `prowl read` and screenshots. Capture it to `/tmp/prowl-self-verify/run-app.log` as shown above instead of streaming the full output into the agent context.
+
+Before a scenario, record the current log line count. After the scenario, inspect only the new lines:
+
+```bash
+log=/tmp/prowl-self-verify/run-app.log
+before="$(wc -l <"$log" | tr -d ' ')"
+
+# Run prowl_debug open/tab/send/read operations here.
+
+sleep 3
+after="$(wc -l <"$log" | tr -d ' ')"
+sed -n "$((before + 1)),${after}p" "$log" \
+  | rg "CLIService|WindowLifecycle|Terminal\\]|SurfaceFocus|terminalEvent|tabCreated|tabClosed|taskStatusChanged|Shell|error|warning"
+```
+
+Use the log to corroborate app-side behavior: socket startup, window surfacing, terminal state creation, focus changes, tab creation/closure, task status changes, and warnings/errors. Logs can arrive a few seconds after the CLI command returns, so wait briefly and re-check before concluding an event is missing.
+
+Do not treat the log as the primary proof of terminal contents or CLI response shape. Use `prowl read` for terminal text, ordinary `jq` for CLI JSON, and screenshots for visual gaps.
 
 ## Reusable Shell Setup
 
@@ -81,7 +104,9 @@ wait_for_prowl_debug
 
 Use `prowl_debug ...` and `debug_window_id` from `scripts/helpers.sh` for the commands below. Keep `PROWL_CLI_SOCKET` explicit if you inline commands instead of using the helper.
 
-Parse `--json` output with ordinary `jq`. If `jq` reports invalid control characters for CLI JSON, treat it as a CLI regression rather than working around it in this skill.
+Parse `--json` output with ordinary `jq`. Do not pipe shell variables through `echo "$json" | jq`: zsh can interpret JSON escape sequences such as `\u001B` and turn them back into raw control characters. Use direct CLI pipes, files, or `printf '%s\n' "$json" | jq`.
+
+If `jq` reports invalid control characters while parsing direct CLI stdout or a captured file, treat it as a CLI regression rather than working around it in this skill.
 
 ## Drive With Prowl CLI
 
@@ -96,10 +121,10 @@ Then seed the debug app and create a deterministic temporary pane:
 
 ```bash
 opened="$(prowl_debug open . --json)"
-worktree="$(echo "$opened" | jq -r '.data.target.worktree.id')"
+worktree="$(printf '%s\n' "$opened" | jq -r '.data.target.worktree.id')"
 created="$(prowl_debug tab create --worktree "$worktree" --json)"
-pane="$(echo "$created" | jq -r '.data.target.pane.id')"
-tab="$(echo "$created" | jq -r '.data.target.tab.id')"
+pane="$(printf '%s\n' "$created" | jq -r '.data.target.pane.id')"
+tab="$(printf '%s\n' "$created" | jq -r '.data.target.tab.id')"
 
 prowl_debug send --pane "$pane" 'printf "SELF_VERIFY:%s\n" "$PWD"' --capture --timeout 30 --json \
   | jq -r '.data.capture.text'
@@ -134,8 +159,8 @@ Example command scenario:
 result="$(prowl_debug send --pane "$pane" \
   'printf "SELF_VERIFY:%s\n" "$PWD"' \
   --capture --timeout 30 --json)"
-echo "$result" | jq -r '.data.capture.text'
-echo "$result" | jq -r '.data.wait.exit_code'
+printf '%s\n' "$result" | jq -r '.data.capture.text'
+printf '%s\n' "$result" | jq -r '.data.wait.exit_code'
 
 prowl_debug read --pane "$pane" --last 80 --wait-stable --json \
   | jq -r '.data.text'

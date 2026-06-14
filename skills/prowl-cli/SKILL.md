@@ -104,19 +104,21 @@ prowl pane close --pane "$pane" --force --json
 
 Do not guess field names. Every `--json` response is `{ "ok", "command", "schema_version", "data": {...} }`, and the terminal text lives at `.data.text` — not `.content`, `.output`, or `.stdout`. Always parse with `jq` against the fields below; the authoritative, per-command field reference lives in `docs/components/cli.md`.
 
+When JSON is stored in a shell variable, use `printf '%s\n' "$json" | jq ...`. Do not use `echo "$json" | jq`: zsh can interpret JSON escape sequences such as `\u001B` and turn them back into raw control characters.
+
 ```bash
 # read: rendered terminal text is .data.text
 prowl read --pane "$pane" --last 80 --wait-stable --json | jq -r '.data.text'
 
 # send --capture: captured output is .data.capture.text; exit code is .data.wait.exit_code
 out="$(prowl send --pane "$pane" 'git status --short' --capture --timeout 30 --json)"
-echo "$out" | jq -r '.data.capture.text'
-echo "$out" | jq -r '.data.wait.exit_code'
+printf '%s\n' "$out" | jq -r '.data.capture.text'
+printf '%s\n' "$out" | jq -r '.data.wait.exit_code'
 
 # tab create / open: new pane and tab ids
 created="$(prowl tab create --worktree "$worktree" --json)"
-echo "$created" | jq -r '.data.target.pane.id'
-echo "$created" | jq -r '.data.target.tab.id'
+printf '%s\n' "$created" | jq -r '.data.target.pane.id'
+printf '%s\n' "$created" | jq -r '.data.target.tab.id'
 
 # list / agents: ids and status
 prowl list --json   | jq -r '.data.items[].pane.id'
