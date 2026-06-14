@@ -57,6 +57,42 @@ make sync-ghostty
 make build-app
 ```
 
+## Prebuilt Artifact Publishing
+
+Prowl's default `make ensure-ghostty` path downloads pinned prebuilt artifacts
+from `onevcat/ghostty` before falling back to a local source build.
+
+Release tag format:
+
+```text
+xcframework-<ghostty_commit_sha>-prowl-v1
+```
+
+Assets:
+
+```text
+GhosttyKit.xcframework.tar.gz
+GhosttyKit-resources.tar.gz
+```
+
+After a local `make sync-ghostty`, package the current artifacts with:
+
+```bash
+scripts/package-ghosttykit-artifacts.sh
+```
+
+Upload both generated assets to the matching `onevcat/ghostty` release, then add
+the emitted manifest line to `scripts/ghosttykit-checksums.txt` in Prowl. The
+manifest is reviewed source of truth for downloaded artifact integrity.
+
+Verify the prebuilt path from a clean artifact state:
+
+```bash
+rm -rf Frameworks/GhosttyKit.xcframework Resources/ghostty Resources/terminfo .ghostty_hash .ghostty_build_stamp
+make ensure-ghostty
+make build-app
+```
+
 ## Force Push Policy
 
 Do not force-push `release/v*-patched` branches. If a cherry-pick needs repair, use a temporary fix branch, validate it, then fast-forward the patched branch.

@@ -29,7 +29,7 @@ PROWL_POSTHOG_API_KEY ?=
 PROWL_POSTHOG_HOST ?=
 
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _check-ghostty-hash _record-ghostty-hash build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -41,6 +41,7 @@ build-ghostty-xcframework: $(GHOSTTY_BUILD_STAMP) # Build ghostty framework
 
 # Internal: actually rebuild ghostty.
 $(GHOSTTY_BUILD_STAMP):
+	git submodule update --init --recursive ThirdParty/ghostty
 	@cd $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty && mise exec -- zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dsentry=false
 	rsync -a ThirdParty/ghostty/macos/GhosttyKit.xcframework Frameworks
 	@src="$(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty/zig-out/share/ghostty"; \
@@ -53,36 +54,34 @@ $(GHOSTTY_BUILD_STAMP):
 	rsync -a --delete "$$terminfo_src/" "$$terminfo_dst/"
 	touch "$(GHOSTTY_BUILD_STAMP)"
 
-# Public entry point: only rebuilds ghostty if submodule SHA changed (or outputs are missing).
-ensure-ghostty: _check-ghostty-hash # Ensure GhosttyKit is up-to-date (fast path when unchanged)
-
-# Internal: compare current submodule SHA against the recorded one.
-_check-ghostty-hash:
-	@current_sha="$$(git -C $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty rev-parse HEAD)"; \
+# Public entry point: downloads pinned prebuilt artifacts when available, then
+# falls back to a local Ghostty source build.
+ensure-ghostty: # Ensure GhosttyKit is up-to-date (fast path when unchanged)
+	@set +e; \
+	"$(CURRENT_MAKEFILE_DIR)/scripts/ensure-ghosttykit-artifacts.sh"; \
+	status="$$?"; \
+	set -e; \
+	if [ "$$status" -eq 0 ]; then \
+		exit 0; \
+	fi; \
+	if [ "$$status" -ne 2 ]; then \
+		exit "$$status"; \
+	fi; \
+	current_sha="$$(git -C "$(CURRENT_MAKEFILE_DIR)" rev-parse HEAD:ThirdParty/ghostty)"; \
 	last_sha=""; \
 	if [ -f "$(GHOSTTY_HASH_FILE)" ]; then \
 		last_sha="$$(cat "$(GHOSTTY_HASH_FILE)")"; \
 	fi; \
-	artifacts_ok=1; \
-	for path in "$(GHOSTTY_XCFRAMEWORK_PATH)" "$(GHOSTTY_RESOURCE_PATH)" "$(GHOSTTY_TERMINFO_PATH)"; do \
-		if [ ! -e "$$path" ]; then \
-			artifacts_ok=0; \
-		fi; \
-	done; \
-	if [ "$$current_sha" != "$$last_sha" ] || [ "$$artifacts_ok" -ne 1 ]; then \
-		echo "Syncing GhosttyKit for submodule $$current_sha"; \
-		$(MAKE) -B build-ghostty-xcframework || exit $$?; \
-		if [ "$$current_sha" != "$$last_sha" ]; then \
-			rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*; \
-			echo "Cleared Xcode DerivedData for ghostty header/module changes"; \
-		fi; \
-	else \
-		echo "GhosttyKit up-to-date (SHA unchanged)"; \
+	echo "Building GhosttyKit locally for $$current_sha"; \
+	$(MAKE) -B build-ghostty-xcframework; \
+	if [ "$$current_sha" != "$$last_sha" ]; then \
+		rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*; \
+		echo "Cleared Xcode DerivedData for ghostty header/module changes"; \
 	fi
 
 # Internal: record the current submodule SHA after a successful build.
 _record-ghostty-hash:
-	@git -C $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty rev-parse HEAD > "$(GHOSTTY_HASH_FILE)"
+	@git -C "$(CURRENT_MAKEFILE_DIR)" rev-parse HEAD:ThirdParty/ghostty > "$(GHOSTTY_HASH_FILE)"
 
 # Force a clean rebuild of GhosttyKit (ignores cached SHA, useful after submodule updates).
 sync-ghostty: # Force sync GhosttyKit to current submodule HEAD (always rebuilds)
