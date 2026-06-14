@@ -57,6 +57,7 @@ struct AppFeature {
     case worktreeSettingsLoaded(RepositorySettings, worktreeID: Worktree.ID)
     case worktreeUserSettingsLoaded(UserRepositorySettings, worktreeID: Worktree.ID)
     case openSelectedWorktree
+    case showSelectedWorktreeDiff
     case openWorktree(OpenWorktreeAction)
     case openWorktreeFailed(OpenActionError)
     case requestQuit
@@ -538,6 +539,9 @@ struct AppFeature {
 
       case .openSelectedWorktree:
         return .send(.openWorktree(OpenWorktreeAction.availableSelection(state.openActionSelection)))
+
+      case .showSelectedWorktreeDiff:
+        return openSelectedWorktreeDiffEffect(state: state)
 
       case .openWorktree(let action):
         guard let worktree = state.repositories.selectedTerminalWorktree else {

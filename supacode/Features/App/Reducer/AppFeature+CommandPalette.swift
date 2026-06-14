@@ -142,12 +142,7 @@ extension AppFeature {
   ) -> Effect<Action>? {
     switch delegate {
     case .showDiff:
-      guard let worktreeID = state.repositories.selectedWorktreeID,
-        let worktree = state.repositories.worktree(for: worktreeID)
-      else {
-        return .none
-      }
-      return openDiffEffect(worktree: worktree, resolvedKeybindings: state.resolvedKeybindings)
+      return openSelectedWorktreeDiffEffect(state: state)
 
     case .revealInFinder:
       return .send(.openWorktree(.finder))
@@ -190,6 +185,15 @@ extension AppFeature {
         send(.openWorktreeFailed(error))
       }
     }
+  }
+
+  func openSelectedWorktreeDiffEffect(state: State) -> Effect<Action> {
+    guard let worktreeID = state.repositories.selectedWorktreeID,
+      let worktree = state.repositories.worktree(for: worktreeID)
+    else {
+      return .none
+    }
+    return openDiffEffect(worktree: worktree, resolvedKeybindings: state.resolvedKeybindings)
   }
 
   func reduceCommandPaletteWorktreeActionDelegate(
