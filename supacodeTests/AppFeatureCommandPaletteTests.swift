@@ -808,7 +808,8 @@ struct AppFeatureCommandPaletteTests {
     repositoriesState.repositories = [repository]
     repositoriesState.selection = .worktree(worktree.id)
     var settings = GlobalSettings.default
-    settings.externalDiffToolID = ExternalDiffTool.hunk.settingsID
+    settings.externalDiffToolID = ExternalDiffTool.custom.settingsID
+    settings.externalDiffCustomCommand = "my-diff {leftPath} {rightPath}"
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(
       fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
@@ -838,7 +839,13 @@ struct AppFeatureCommandPaletteTests {
     await store.finish()
 
     #expect(
-      launched.value.map(\.0) == [ExternalDiffSettings(toolID: ExternalDiffTool.hunk.settingsID, customCommand: "")])
+      launched.value.map(\.0) == [
+        ExternalDiffSettings(
+          toolID: ExternalDiffTool.custom.settingsID,
+          customCommand: "my-diff {leftPath} {rightPath}"
+        )
+      ]
+    )
     #expect(launched.value.map(\.1) == [worktree])
   }
 
