@@ -147,16 +147,7 @@ extension AppFeature {
       else {
         return .none
       }
-      let keybindings = state.resolvedKeybindings
-      return .run { _ in
-        await MainActor.run {
-          DiffWindowManager.shared.show(
-            worktreeURL: worktree.workingDirectory,
-            branchName: worktree.name,
-            resolvedKeybindings: keybindings
-          )
-        }
-      }
+      return openDiffEffect(worktree: worktree, resolvedKeybindings: state.resolvedKeybindings)
 
     case .revealInFinder:
       return .send(.openWorktree(.finder))
@@ -182,6 +173,22 @@ extension AppFeature {
 
     default:
       return nil
+    }
+  }
+
+  func openDiffEffect(
+    worktree: Worktree,
+    resolvedKeybindings: ResolvedKeybindingMap
+  ) -> Effect<Action> {
+    @Shared(.settingsFile) var settingsFile
+    let settings = ExternalDiffSettings(
+      toolID: settingsFile.global.externalDiffToolID,
+      customCommand: settingsFile.global.externalDiffCustomCommand
+    )
+    return .run { send in
+      await externalDiffToolClient.open(settings, worktree, resolvedKeybindings) { error in
+        send(.openWorktreeFailed(error))
+      }
     }
   }
 

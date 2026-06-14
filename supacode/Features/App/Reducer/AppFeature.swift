@@ -102,6 +102,7 @@ struct AppFeature {
   @Dependency(TerminalClient.self) var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) var customShortcutRegistryClient
+  @Dependency(ExternalDiffToolClient.self) var externalDiffToolClient
 
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
@@ -345,6 +346,12 @@ struct AppFeature {
             await settingsWindowClient.show()
           }
         )
+
+      case .repositories(.delegate(.showDiff(let worktreeID))):
+        guard let worktree = state.repositories.worktree(for: worktreeID) else {
+          return .none
+        }
+        return openDiffEffect(worktree: worktree, resolvedKeybindings: state.resolvedKeybindings)
 
       case .settings(.setSelection(let selection)):
         let resolvedSelection = selection ?? .general
