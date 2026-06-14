@@ -72,6 +72,10 @@ nonisolated enum ExternalDiffTool: String, CaseIterable, Identifiable, Codable, 
     menuOrder.filter(\.isInstalled)
   }
 
+  static var settingsMenuCases: [ExternalDiffTool] {
+    menuOrder
+  }
+
   static func fromSettingsID(_ settingsID: String?) -> ExternalDiffTool {
     guard let settingsID,
       let tool = Self(rawValue: settingsID),

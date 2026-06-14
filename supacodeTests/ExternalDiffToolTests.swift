@@ -19,6 +19,18 @@ struct ExternalDiffToolTests {
     #expect(ExternalDiffTool.custom.launchMode == .gui)
   }
 
+  @Test func settingsMenuListsAllSupportedTools() {
+    #expect(
+      ExternalDiffTool.settingsMenuCases == [
+        .builtIn,
+        .hunk,
+        .fileMerge,
+        .kaleidoscope,
+        .custom,
+      ]
+    )
+  }
+
   @Test func explicitSettingsResolveWithoutCheckingInstallation() {
     #expect(ExternalDiffSettings(toolID: ExternalDiffTool.hunk.settingsID, customCommand: "").tool == .hunk)
   }

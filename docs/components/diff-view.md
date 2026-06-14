@@ -30,6 +30,8 @@ General → Diff Tool, you can choose an external tool instead:
   command in the worktree directory. Supported placeholders:
   `{leftPath}`, `{rightPath}`, `{worktreePath}`, `{repoPath}`, and `{branch}`.
 
+Tools that are not installed on the Mac are shown disabled in the Diff Tool menu.
+
 ## What the built-in window shows
 
 - A **file list** sidebar of changed files, each with a colored status badge:

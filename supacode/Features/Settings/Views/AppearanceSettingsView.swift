@@ -6,7 +6,7 @@ struct AppearanceSettingsView: View {
 
   var body: some View {
     let openActionOptions = OpenWorktreeAction.availableCases
-    let externalDiffToolOptions = ExternalDiffTool.availableCases
+    let externalDiffToolOptions = ExternalDiffTool.settingsMenuCases
     VStack(alignment: .leading) {
       Form {
         Section("Appearance") {
@@ -146,9 +146,13 @@ struct AppearanceSettingsView: View {
             ForEach(externalDiffToolOptions) { tool in
               Text(tool.title)
                 .tag(tool.settingsID)
+                .disabled(!tool.isInstalled)
             }
           }
           .help("Choose what opens when you click a diff badge or run Show Diff.")
+          Text("Tools not installed on this Mac appear disabled.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
           if store.externalDiffToolID == ExternalDiffTool.custom.settingsID {
             TextField(
               "Command",
