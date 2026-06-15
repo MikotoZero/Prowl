@@ -589,11 +589,13 @@ struct RepositoriesFeatureTests {
     }
 
     let title = "Workspace"
+    let requestedRootPath = defaultWorkspaceBaseRootPath(for: title)
+    let resolvedRootPath = expectedDefaultWorkspaceRootPath(for: title)
     await store.send(.workspaceCreation(.promptRequested)) {
       $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
         repositories: [],
         title: title,
-        rootPath: defaultWorkspaceBaseRootPath(for: title),
+        rootPath: requestedRootPath,
         openedRepositoryCandidates: [
           ProjectWorkspaceCreationRepository(
             id: "/tmp/repo-a",
@@ -603,8 +605,12 @@ struct RepositoriesFeatureTests {
         ]
       )
     }
-    await store.receive(\.workspaceCreation.defaultRootPathResolved) {
-      $0.workspaceCreationPrompt?.rootPath = expectedDefaultWorkspaceRootPath(for: title)
+    if resolvedRootPath == requestedRootPath {
+      await store.receive(\.workspaceCreation.defaultRootPathResolved)
+    } else {
+      await store.receive(\.workspaceCreation.defaultRootPathResolved) {
+        $0.workspaceCreationPrompt?.rootPath = resolvedRootPath
+      }
     }
   }
 
@@ -701,11 +707,13 @@ struct RepositoriesFeatureTests {
     }
 
     let title = "Workspace"
+    let requestedRootPath = defaultWorkspaceBaseRootPath(for: title)
+    let resolvedRootPath = expectedDefaultWorkspaceRootPath(for: title)
     await store.send(.workspaceCreation(.promptRequested)) {
       $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
         repositories: [],
         title: title,
-        rootPath: defaultWorkspaceBaseRootPath(for: title),
+        rootPath: requestedRootPath,
         openedRepositoryCandidates: [
           ProjectWorkspaceCreationRepository(
             id: repoRootA,
@@ -720,8 +728,12 @@ struct RepositoriesFeatureTests {
         ]
       )
     }
-    await store.receive(\.workspaceCreation.defaultRootPathResolved) {
-      $0.workspaceCreationPrompt?.rootPath = expectedDefaultWorkspaceRootPath(for: title)
+    if resolvedRootPath == requestedRootPath {
+      await store.receive(\.workspaceCreation.defaultRootPathResolved)
+    } else {
+      await store.receive(\.workspaceCreation.defaultRootPathResolved) {
+        $0.workspaceCreationPrompt?.rootPath = resolvedRootPath
+      }
     }
   }
 
@@ -755,11 +767,13 @@ struct RepositoriesFeatureTests {
     }
 
     let title = "Workspace"
+    let requestedRootPath = defaultWorkspaceBaseRootPath(for: title)
+    let resolvedRootPath = expectedDefaultWorkspaceRootPath(for: title)
     await store.send(.workspaceCreation(.promptRequested)) {
       $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
         repositories: [],
         title: title,
-        rootPath: defaultWorkspaceBaseRootPath(for: title),
+        rootPath: requestedRootPath,
         openedRepositoryCandidates: [
           ProjectWorkspaceCreationRepository(
             id: repoRootA,
@@ -774,8 +788,12 @@ struct RepositoriesFeatureTests {
         ]
       )
     }
-    await store.receive(\.workspaceCreation.defaultRootPathResolved) {
-      $0.workspaceCreationPrompt?.rootPath = expectedDefaultWorkspaceRootPath(for: title)
+    if resolvedRootPath == requestedRootPath {
+      await store.receive(\.workspaceCreation.defaultRootPathResolved)
+    } else {
+      await store.receive(\.workspaceCreation.defaultRootPathResolved) {
+        $0.workspaceCreationPrompt?.rootPath = resolvedRootPath
+      }
     }
     await store.send(.workspaceCreationPrompt(.presented(.addOpenedRepository(repoRootA)))) {
       $0.workspaceCreationPrompt?.repositories.append(
