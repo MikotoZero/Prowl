@@ -22,6 +22,7 @@ struct CanvasCardView: View {
   let isFocused: Bool
   let isSelected: Bool
   let hasUnseenNotification: Bool
+  let tabIcon: String?
   let tabId: TerminalTabID
   let tabs: [TerminalTabItem]
   let tabContextMenuActions: TerminalTabContextMenuActions
@@ -144,10 +145,16 @@ struct CanvasCardView: View {
       Text(repositoryName)
         .font(.caption.bold())
         .lineLimit(1)
-      Text("/ \(worktreeName)")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
+      HStack(spacing: 3) {
+        Text("/")
+        if let tabIcon {
+          TabIconImage(rawName: tabIcon, pointSize: 10)
+        }
+        Text(worktreeName)
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .lineLimit(1)
       Spacer()
       titleBarActions
     }
