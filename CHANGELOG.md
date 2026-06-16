@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.6.16](https://github.com/onevcat/Prowl/releases/tag/v2026.6.16)
+
+### New
+
+- **Configurable diff tool**: Choose your preferred diff viewer in Settings — Built-in, Hunk (opens in a Prowl terminal tab), FileMerge, Kaleidoscope, or a custom command. The diff badge and Show Diff shortcut both route through this setting. Tools not installed on your system appear disabled in the picker.
+- **`prowl agents` CLI command**: Run `prowl agents` (or `prowl agents --json`) to get a live roster of all active agent panes, including their project, worktree, tab, and current working/idle status.
+- **Oh My Pi support**: Prowl now recognizes Oh My Pi (`omp` / `oh-my-pi`) as an agent, detects its working and interrupting states, and shows the Pi icon on tabs running it.
+
+### Improved
+
+- Active agent detection now uses per-pane lazy scheduling: cold panes stay idle, recently used panes are checked briefly, and full polling only starts after a known agent runtime is detected. This reduces unnecessary background work.
+- Command aliases (such as wrapped `bun` invocations for Oh My Pi) are now shown with the correct icon in the Active Agents list.
+
+### Fixed
+
+- `prowl read --json` and other JSON CLI output no longer corrupts responses that contain terminal control characters.
+
 ## [2026.6.13](https://github.com/onevcat/Prowl/releases/tag/v2026.6.13)
 
 This release improves multi-account GitHub workflows, expands editor support in the Open In menu, and stabilizes agent status detection.
