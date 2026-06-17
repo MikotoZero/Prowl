@@ -24,8 +24,9 @@ struct ToolbarNotificationsPopoverButton: View {
     Button {
       togglePresentation()
     } label: {
-      HStack(spacing: 6) {
+      HStack(spacing: 4) {
         Image(systemName: unseenWorktreeCount > 0 ? "bell.badge.fill" : "bell.fill")
+          .imageScale(.medium)
           .foregroundStyle(unseenWorktreeCount > 0 ? .orange : .secondary)
           .accessibilityHidden(true)
         if notificationCount > 0 {
