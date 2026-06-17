@@ -47,6 +47,7 @@ Selection controls:
 | Resize a card | Drag its edges/corners |
 | Expand / restore a card | `⌘⌥E`, double-click the title bar, or the title-bar expand button — fills the viewport with that card; click the dimmed background or `⌘⌥E` again to restore |
 | Close a card (its tab) | The **×** in the card title bar |
+| Right-click a card's title bar | Context menu: Rename Tab, Change Icon, Close Tab, Close Other/All Tabs in This Worktree |
 | Pan the board | Drag empty space (or middle-drag) |
 | Zoom | `⌘` + scroll, or pinch (≈0.25×–2×) |
 

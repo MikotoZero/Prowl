@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "371bb945b030d3a1f030057e6eeccdd4da50474b",
-  "last_synced_date": "2026-06-16",
-  "note": "No doc edits needed: all user-facing features in range were already documented in their feature PRs. (1) External diff tools (#449) — configurable diff tool (built-in/Hunk/FileMerge/Kaleidoscope/custom command) with disabled display for unavailable tools; covered in diff-view.md and settings-fields.md (externalDiffToolID/externalDiffCustomCommand rows). (2) CLI agents command (#442) — `prowl agents` listing detected agent panes; covered in cli.md. (3) Oh My Pi agent detection (#440) — added `omp`/`oh-my-pi` as process-name aliases for Pi detection; covered in agent-detection.md. Remaining changes: agent detection scheduling internal improvement (#441), CLI JSON control character fix (#445), GhosttyKit prebuilt artifact downloader (#450). Baseline bump only."
+  "last_synced_commit": "40afc8c21b81833844b1667f3f4b101bb34aa183",
+  "last_synced_date": "2026-06-18",
+  "note": "Canvas card title bar now supports right-click context menu (Rename Tab, Change Icon, Close Tab, Close Other/All Tabs in This Worktree) — added to canvas.md. Shelf context menu now shows 'Close Tabs Below' instead of 'Close Tabs to the Right' (label-only, tolerated). PR refresh fixes (#456, #469) and layout restore race fix (#459) are internal behavior fixes, not new features. Toolbar icon fix (#467) cosmetic only."
 }
