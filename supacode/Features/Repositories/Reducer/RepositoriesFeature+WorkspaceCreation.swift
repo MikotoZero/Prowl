@@ -260,11 +260,13 @@ extension RepositoriesFeature {
         repositoryURL = (try? await gitClient.repoRoot(sourceURL)) ?? sourceURL
       }
 
-      let automaticBaseRef = await gitClient.automaticWorktreeBaseRef(repositoryURL)
+      async let automaticBaseRefTask = gitClient.automaticWorktreeBaseRef(repositoryURL)
+      async let refsTask = gitClient.branchRefOptions(repositoryURL)
+      let automaticBaseRef = await automaticBaseRefTask
       let refs: [GitBranchRefOption]
       var errorMessage: String?
       do {
-        refs = try await gitClient.branchRefOptions(repositoryURL)
+        refs = try await refsTask
       } catch {
         refs = []
         let name = repository.name.trimmingCharacters(in: .whitespacesAndNewlines)
