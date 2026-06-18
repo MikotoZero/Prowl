@@ -22,8 +22,13 @@ struct RepositorySectionView: View {
   var body: some View {
     let state = store.state
     let isExpanded = expandedRepoIDs.contains(repository.id)
+    // Workspaces are `.plain` (no git worktrees) but still expand to reveal
+    // their child repository rows, so they get the chevron even though
+    // `supportsWorktrees` is false. Worktree-creation affordances stay gated on
+    // `supportsWorktrees` so a workspace never offers "New Worktree".
+    let isExpandable = repository.capabilities.supportsWorktrees || repository.isWorkspace
     let isRemovingRepository = state.isRemovingRepository(repository)
-    let isSelected = state.selection == .repository(repository.id)
+    let isSelected = state.selection == .repository(repository.id) && state.selectedWorkspaceChildID == nil
     let openRepoSettings = {
       _ = store.send(.repositoryManagement(.openRepositorySettings(repository.id)))
     }
@@ -54,7 +59,7 @@ struct RepositorySectionView: View {
           repositoryRootURL: repository.rootURL,
           nameTooltip: repository.capabilities.supportsWorktrees
             ? (isExpanded ? "Collapse" : "Expand")
-            : "Open terminal in folder"
+            : (repository.isWorkspace ? "Open terminal in workspace" : "Open terminal in folder")
         )
         RepoHeaderTabCountBadge(
           repository: repository,
@@ -147,7 +152,7 @@ struct RepositorySectionView: View {
           )
           .disabled(isRemovingRepository)
         }
-        if repository.capabilities.supportsWorktrees {
+        if isExpandable {
           Button {
             toggleExpanded()
           } label: {
@@ -183,10 +188,12 @@ struct RepositorySectionView: View {
           .accessibilityLabel(Text("Repo color: \(color.displayName)"))
       }
     }
-    .frame(maxWidth: .infinity, minHeight: headerCellHeight, maxHeight: .infinity, alignment: .center)
+    .frame(
+      maxWidth: .infinity, minHeight: headerCellHeight, maxHeight: .infinity, alignment: .center
+    )
     .padding(.horizontal, 12)
     .padding(.top, hasTopSpacing ? 4 : 0)
-    .padding(.bottom, hasTopSpacing && !repository.capabilities.supportsWorktrees ? 4 : 0)
+    .padding(.bottom, hasTopSpacing && !isExpandable ? 4 : 0)
     .contentShape(.interaction, .rect)
     .background {
       if isSelected {
@@ -236,14 +243,25 @@ struct RepositorySectionView: View {
       header
         .tag(SidebarSelection.repository(repository.id))
       if isExpanded {
-        WorktreeRowsView(
-          repository: repository,
-          isExpanded: isExpanded,
-          hotkeyRows: hotkeyRows,
-          selectedWorktreeIDs: selectedWorktreeIDs,
-          store: store,
-          terminalManager: terminalManager
-        )
+        if repository.isWorkspace {
+          WorkspaceChildRowsView(
+            rows: state.workspaceChildRows(in: repository),
+            selectedID: state.selection == .repository(repository.id)
+              ? state.selectedWorkspaceChildID : nil,
+            onSelect: { childID in
+              store.send(.openWorkspaceChild(childID))
+            }
+          )
+        } else {
+          WorktreeRowsView(
+            repository: repository,
+            isExpanded: isExpanded,
+            hotkeyRows: hotkeyRows,
+            selectedWorktreeIDs: selectedWorktreeIDs,
+            store: store,
+            terminalManager: terminalManager
+          )
+        }
       }
     }
     .id(SidebarScrollID.repository(repository.id))

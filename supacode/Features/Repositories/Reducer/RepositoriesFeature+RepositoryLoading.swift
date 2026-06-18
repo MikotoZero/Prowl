@@ -67,6 +67,9 @@ extension RepositoriesFeature {
           let normalizedPath = URL(fileURLWithPath: entry.path)
             .standardizedFileURL
             .path(percentEncoded: false)
+          if ProjectWorkspace.load(from: URL(fileURLWithPath: normalizedPath)) != nil {
+            return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+          }
           do {
             let repoRoot = try await gitClient.repoRoot(URL(fileURLWithPath: normalizedPath))
             let normalizedRepoRoot = repoRoot.standardizedFileURL.path(percentEncoded: false)
@@ -186,14 +189,16 @@ extension RepositoriesFeature {
               )
             }
           case .plain:
+            let workspace = ProjectWorkspace.load(from: rootURL)
             return WorktreesFetchResult(
               entry: entry,
               repository: Repository(
                 id: rootURL.path(percentEncoded: false),
                 rootURL: rootURL,
-                name: Repository.name(for: rootURL),
+                name: workspace?.title ?? Repository.name(for: rootURL),
                 kind: .plain,
-                worktrees: IdentifiedArray()
+                worktrees: IdentifiedArray(),
+                workspace: workspace
               ),
               errorMessage: nil
             )
@@ -308,6 +313,7 @@ extension RepositoriesFeature {
       !isSidebarSelectionValid(state.selection, state: state)
     {
       state.selection = nil
+      state.selectedWorkspaceChildID = nil
     }
     if state.shouldRestoreLastFocusedWorktree {
       state.shouldRestoreLastFocusedWorktree = false
@@ -315,13 +321,16 @@ extension RepositoriesFeature {
         isSelectionValid(state.lastFocusedWorktreeID, state: state)
       {
         state.selection = state.lastFocusedWorktreeID.map(SidebarSelection.worktree)
+        state.selectedWorkspaceChildID = nil
       }
     }
     if state.selection == nil, state.shouldSelectFirstAfterReload {
       state.selection = firstAvailableWorktreeID(from: repositories, state: state)
         .map(SidebarSelection.worktree)
+      state.selectedWorkspaceChildID = nil
       state.shouldSelectFirstAfterReload = false
     }
+    pruneWorkspaceChildInfo(state: &state)
     return ApplyRepositoriesResult(
       didPrunePinned: didPrunePinned,
       didPruneRepositoryOrder: didPruneRepositoryOrder,
