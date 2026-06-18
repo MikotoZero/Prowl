@@ -96,6 +96,42 @@ struct RepositorySettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
 
+      if let workspace = store.workspace {
+        Section {
+          VStack(alignment: .leading, spacing: 12) {
+            if !workspace.description.isEmpty {
+              Text(workspace.description)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            }
+            if !workspace.taskLinks.isEmpty {
+              VStack(alignment: .leading, spacing: 4) {
+                ForEach(workspace.taskLinks, id: \.self) { link in
+                  Text(link)
+                    .font(.subheadline.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                }
+              }
+            }
+            WorkspaceRepositoriesGridView(workspace: workspace, rootURL: store.rootURL)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        } header: {
+          Text("Workspace")
+        } footer: {
+          Text(
+            "Read-only. Defined in "
+              + "\(ProjectWorkspace.metadataURL(for: store.rootURL).path(percentEncoded: false)) "
+              + "— edit that file to change it."
+          )
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+        }
+      }
+
       if store.showsWorktreeSettings {
         Section {
           if store.isBranchDataLoaded {
@@ -104,8 +140,10 @@ struct RepositorySettingsView: View {
               isBranchPickerPresented = true
             } label: {
               HStack {
-                Text(store.settings.worktreeBaseRef ?? "Automatic (\(store.defaultWorktreeBaseRef))")
-                  .foregroundStyle(.primary)
+                Text(
+                  store.settings.worktreeBaseRef ?? "Automatic (\(store.defaultWorktreeBaseRef))"
+                )
+                .foregroundStyle(.primary)
                 Spacer()
                 Image(systemName: "chevron.up.chevron.down")
                   .foregroundStyle(.secondary)
@@ -133,7 +171,7 @@ struct RepositorySettingsView: View {
           }
         } header: {
           VStack(alignment: .leading, spacing: 4) {
-            Text("Branch new workspaces from")
+            Text("Branch new worktrees from")
             Text("Each workspace is an isolated copy of your codebase.")
               .foregroundStyle(.secondary)
           }
@@ -147,8 +185,10 @@ struct RepositorySettingsView: View {
             )
             .textFieldStyle(.roundedBorder)
 
-            Text("Set a repository-specific worktree base directory. Leave empty to inherit the global setting.")
-              .foregroundStyle(.secondary)
+            Text(
+              "Set a repository-specific worktree base directory. Leave empty to inherit the global setting."
+            )
+            .foregroundStyle(.secondary)
             Text("Example new worktree path: \(exampleWorktreePath)")
               .foregroundStyle(.secondary)
               .monospaced()
@@ -334,8 +374,10 @@ struct RepositorySettingsView: View {
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Custom Commands")
-            Text("Repository-local terminal actions. Custom command shortcuts take precedence in this repository.")
-              .foregroundStyle(.secondary)
+            Text(
+              "Repository-local terminal actions. Custom command shortcuts take precedence in this repository."
+            )
+            .foregroundStyle(.secondary)
           }
         }
       }

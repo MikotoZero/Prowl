@@ -69,6 +69,32 @@ struct ForceDeleteBranchRequest: Equatable {
   let errorMessage: String
 }
 
+// Result of refreshing one workspace child repository's live status: current
+// branch, uncommitted diff counts, and (when GitHub integration is available)
+// the PR for that branch.
+struct WorkspaceChildInfoUpdate: Equatable, Sendable {
+  let id: String
+  let branch: String?
+  let added: Int?
+  let removed: Int?
+  let pullRequest: GithubPullRequest?
+}
+
+struct RemoveWorkspaceConfirmation: Equatable {
+  struct BranchOption: Equatable, Identifiable {
+    let id: String
+    let repositoryName: String
+    let branchName: String
+    var isSelected = false
+  }
+
+  let repositoryID: Repository.ID
+  let workspaceTitle: String
+  let rootPath: String
+  var deleteFiles = false
+  var branchOptions: [BranchOption] = []
+}
+
 @Reducer
 struct RepositoriesFeature {
   enum CancelID {
@@ -78,6 +104,8 @@ struct RepositoriesFeature {
     static let githubIntegrationRecovery = "repositories.githubIntegrationRecovery"
     static let worktreePromptLoad = "repositories.worktreePromptLoad"
     static let worktreePromptValidation = "repositories.worktreePromptValidation"
+    static let workspaceCreation = "repositories.workspaceCreation"
+    static let workspaceChildrenRefresh = "repositories.workspaceChildrenRefresh"
     static func archiveScript(_ worktreeID: Worktree.ID) -> String {
       "repositories.archiveScript.\(worktreeID)"
     }
@@ -212,8 +240,38 @@ struct RepositoriesFeature {
     )
     case requestRemoveRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
+    case removeWorkspaceDeleteFilesChanged(Bool)
+    case removeWorkspaceDeleteBranchChanged(String, Bool)
+    case removeWorkspacePromptDismissed
+    case removeWorkspacePromptConfirmed
+    case workspaceCleanupReportedFailures(
+      repositoryID: Repository.ID,
+      rootPath: String,
+      failedRepositoryNames: [String],
+      selectionWasRemoved: Bool
+    )
     case repositoryRemoved(Repository.ID, selectionWasRemoved: Bool)
     case openRepositorySettings(Repository.ID)
+  }
+
+  @CasePathable
+  enum WorkspaceCreationAction: Equatable {
+    case promptRequested
+    case defaultRootPathResolved(path: String, requestedRootPath: String)
+    case promptCanceled
+    case promptDismissed
+    case refreshBaseRefs(Repository.ID)
+    case baseRefsLoaded(
+      repositoryID: Repository.ID,
+      sourceKind: ProjectWorkspaceRepositorySourceKind,
+      sourceLocation: String,
+      options: [GitBranchRefOption],
+      defaultBaseRef: String?,
+      errorMessage: String?
+    )
+    case createWorkspace(ProjectWorkspaceCreationDraft)
+    case workspaceCreated(URL)
+    case workspaceCreationFailed(String)
   }
 
   @ObservableState
@@ -231,6 +289,14 @@ struct RepositoriesFeature {
     var repositoryCustomTitles: [Repository.ID: String] = [:]
     var selection: SidebarSelection?
     var worktreeInfoByID: [Worktree.ID: WorktreeInfoEntry] = [:]
+    // Live status for workspace child repositories, keyed by the child's
+    // working-directory path. Kept separate from `worktreeInfoByID` (which is
+    // pruned to tracked worktrees) because workspace children are not tracked
+    // worktrees — they are metadata entries materialized inside the workspace
+    // folder. Refreshed by `refreshWorkspaceChildrenEffect` on each repo reload.
+    var workspaceChildInfoByID: [String: WorktreeInfoEntry] = [:]
+    var workspaceChildBranchByID: [String: String] = [:]
+    var selectedWorkspaceChildID: String?
     var worktreeOrderByRepository: [Repository.ID: [Worktree.ID]] = [:]
     var isOpenPanelPresented = false
     var isInitialLoadComplete = false
@@ -279,6 +345,7 @@ struct RepositoriesFeature {
     @Shared(.appStorage("prowlCreatedWorktreeIDs")) var prowlCreatedWorktreeIDs: [Worktree.ID] = []
     var nextDeleteWorktreeConfirmationID = 0
     var deleteWorktreeConfirmation: DeleteWorktreeConfirmation?
+    var removeWorkspaceConfirmation: RemoveWorkspaceConfirmation?
     var pendingForceDeleteBranchRequests: [ForceDeleteBranchRequest] = []
     var nextPendingSidebarRevealID = 0
     var pendingSidebarReveal: PendingSidebarReveal?
@@ -294,6 +361,7 @@ struct RepositoriesFeature {
     var activeAgents = ActiveAgentsFeature.State()
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
+    @Presents var workspaceCreationPrompt: WorkspaceCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -326,6 +394,7 @@ struct RepositoriesFeature {
     case worktreeOrdering(WorktreeOrderingAction)
     case githubIntegration(GithubIntegrationAction)
     case repositoryManagement(RepositoryManagementAction)
+    case workspaceCreation(WorkspaceCreationAction)
     case activeAgents(ActiveAgentsFeature.Action)
     case task
     case repositorySnapshotLoaded([Repository]?)
@@ -360,6 +429,7 @@ struct RepositoriesFeature {
     case markWorktreeClosed(Worktree.ID)
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
+    case openWorkspaceChild(String)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)
     case focusCanvasRepository(Repository.ID)
     case focusCanvasWorktree(Worktree.ID)
@@ -379,9 +449,11 @@ struct RepositoriesFeature {
     case worktreeInfoEvent(WorktreeInfoWatcherClient.Event)
     case worktreeBranchNameLoaded(worktreeID: Worktree.ID, name: String)
     case worktreeLineChangesLoaded(worktreeID: Worktree.ID, added: Int, removed: Int)
+    case workspaceChildrenInfoLoaded([WorkspaceChildInfoUpdate])
     case showToast(StatusToast)
     case dismissToast
     case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
+    case workspaceCreationPrompt(PresentationAction<WorkspaceCreationPromptFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
   }
@@ -425,6 +497,10 @@ struct RepositoriesFeature {
     case confirmArchiveWorktrees([ArchiveWorktreeTarget])
     case confirmForceDeleteBranch(ForceDeleteBranchRequest)
     case confirmRemoveRepository(Repository.ID)
+    case confirmWorkspaceRootDeletion(
+      repositoryID: Repository.ID, rootPath: String, selectionWasRemoved: Bool)
+    case keepWorkspaceFolderAfterCleanupFailure(
+      repositoryID: Repository.ID, selectionWasRemoved: Bool)
   }
 
   enum PullRequestAction: Equatable {
@@ -470,12 +546,16 @@ struct RepositoriesFeature {
       worktreeOrderingReducer
       githubIntegrationReducer
       repositoryManagementReducer
+      workspaceCreationReducer
       Scope(state: \.activeAgents, action: \.activeAgents) {
         ActiveAgentsFeature()
       }
     }
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()
+    }
+    .ifLet(\.$workspaceCreationPrompt, action: \.workspaceCreationPrompt) {
+      WorkspaceCreationPromptFeature()
     }
   }
 
@@ -487,3 +567,4 @@ struct RepositoriesFeature {
 // - RepositoriesFeature+WorktreeOrdering.swift
 // - RepositoriesFeature+GithubIntegration.swift
 // - RepositoriesFeature+RepositoryManagement.swift
+// - RepositoriesFeature+WorkspaceCreation.swift

@@ -369,6 +369,31 @@ struct AppFeatureCommandPaletteTests {
     }
   }
 
+  @Test(.dependencies) func newWorkspaceDispatchesPromptRequest() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+
+    let title = "Workspace"
+    let requestedRootPath = defaultWorkspaceBaseRootPath(for: title)
+    let resolvedRootPath = expectedDefaultWorkspaceRootPath(for: title)
+    await store.send(.commandPalette(.delegate(.newWorkspace)))
+    await store.receive(\.repositories.workspaceCreation.promptRequested) {
+      $0.repositories.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+        repositories: [],
+        title: title,
+        rootPath: requestedRootPath
+      )
+    }
+    if resolvedRootPath == requestedRootPath {
+      await store.receive(\.repositories.workspaceCreation.defaultRootPathResolved)
+    } else {
+      await store.receive(\.repositories.workspaceCreation.defaultRootPathResolved) {
+        $0.repositories.workspaceCreationPrompt?.rootPath = resolvedRootPath
+      }
+    }
+  }
+
   @Test(.dependencies) func refreshWorktreesDispatchesRefresh() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()

@@ -39,6 +39,14 @@ struct ContentView: View {
         }
       }
     )
+    let removeWorkspaceConfirmationPresented = Binding(
+      get: { repositoriesStore.removeWorkspaceConfirmation != nil },
+      set: { isPresented in
+        if !isPresented {
+          repositoriesStore.send(.repositoryManagement(.removeWorkspacePromptDismissed))
+        }
+      }
+    )
     Group {
       if store.repositories.isInitialLoadComplete {
         mainSplitView
@@ -80,6 +88,10 @@ struct ContentView: View {
       promptStore in
       WorktreeCreationPromptView(store: promptStore)
     }
+    .sheet(item: $repositoriesStore.scope(state: \.workspaceCreationPrompt, action: \.workspaceCreationPrompt)) {
+      promptStore in
+      WorkspaceCreationPromptView(store: promptStore)
+    }
     .sheet(isPresented: deleteWorktreeConfirmationPresented) {
       if let confirmation = repositoriesStore.deleteWorktreeConfirmation {
         DeleteWorktreeConfirmationView(
@@ -92,6 +104,25 @@ struct ContentView: View {
           },
           onDelete: {
             repositoriesStore.send(.worktreeLifecycle(.deleteWorktreePromptConfirmed))
+          }
+        )
+      }
+    }
+    .sheet(isPresented: removeWorkspaceConfirmationPresented) {
+      if let confirmation = repositoriesStore.removeWorkspaceConfirmation {
+        RemoveWorkspaceConfirmationView(
+          confirmation: confirmation,
+          onDeleteFilesChanged: {
+            repositoriesStore.send(.repositoryManagement(.removeWorkspaceDeleteFilesChanged($0)))
+          },
+          onDeleteBranchChanged: {
+            repositoriesStore.send(.repositoryManagement(.removeWorkspaceDeleteBranchChanged($0, $1)))
+          },
+          onCancel: {
+            repositoriesStore.send(.repositoryManagement(.removeWorkspacePromptDismissed))
+          },
+          onRemove: {
+            repositoriesStore.send(.repositoryManagement(.removeWorkspacePromptConfirmed))
           }
         )
       }
