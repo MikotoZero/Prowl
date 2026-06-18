@@ -434,6 +434,10 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       .appending(path: metadataFileName)
   }
 
+  static func hasMetadata(at rootURL: URL) -> Bool {
+    FileManager.default.fileExists(atPath: metadataURL(for: rootURL).path(percentEncoded: false))
+  }
+
   static func load(from rootURL: URL) -> ProjectWorkspace? {
     let metadataURL = metadataURL(for: rootURL)
     guard let data = try? Data(contentsOf: metadataURL) else {
