@@ -54,7 +54,7 @@ struct RepositorySectionView: View {
           name: repository.name,
           customTitle: store.repositoryCustomTitles[repository.id],
           isRemoving: isRemovingRepository,
-          icon: appearance.icon,
+          icon: appearance.icon ?? (repository.isWorkspace ? .sfSymbol("folder") : nil),
           iconTint: appearance.color?.color ?? .accentColor,
           repositoryRootURL: repository.rootURL,
           nameTooltip: repository.capabilities.supportsWorktrees
