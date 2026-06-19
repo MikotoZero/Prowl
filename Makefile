@@ -165,7 +165,7 @@ run-app: build-app # Build then launch (Debug) with log streaming
 	app_path="$$build_dir/$$product/Contents/MacOS/$$exec_name"; \
 	"$$app_path"
 
-install-dev-build: build-app # install dev build to /Applications
+install-dev-build: build-app # Build Debug and install to /Applications
 	@set -euo pipefail; \
 	settings="$$(xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug -showBuildSettings -json 2>/dev/null)"; \
 	build_dir="$$(echo "$$settings" | jq -er '.[0].buildSettings.BUILT_PRODUCTS_DIR')"; \
