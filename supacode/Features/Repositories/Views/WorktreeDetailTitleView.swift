@@ -12,47 +12,53 @@ struct WorktreeDetailTitleView: View {
   @State private var draftName = ""
 
   var body: some View {
-    Group {
-      if title.supportsRename {
-        Button {
-          openRenamePopover()
-        } label: {
-          labelContent
-        }
-        .help(
-          AppShortcuts.helpText(
-            title: "Rename branch",
-            commandID: AppShortcuts.CommandID.renameBranch,
-            in: resolvedKeybindings
-          )
+    titleButton
+      .onHover { hovering in
+        isHovered = hovering
+      }
+      .popover(isPresented: $isPresented) {
+        RenameBranchPopover(
+          draftName: $draftName,
+          onCancel: { isPresented = false },
+          onSubmit: { newName in
+            isPresented = false
+            if newName != title.text {
+              onSubmit?(newName)
+            }
+          }
         )
-        .modifier(
-          KeyboardShortcutModifier(
-            shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.renameBranch)
-          ))
-      } else {
+      }
+      .task(id: externalRenamePrompt?.id) {
+        guard let prompt = externalRenamePrompt, title.supportsRename else { return }
+        openRenamePopover()
+        onConsumeExternalRenamePrompt(prompt.id)
+      }
+  }
+
+  @ViewBuilder
+  private var titleButton: some View {
+    if title.supportsRename {
+      Button {
+        openRenamePopover()
+      } label: {
         labelContent
       }
-    }
-    .onHover { hovering in
-      isHovered = hovering
-    }
-    .popover(isPresented: $isPresented) {
-      RenameBranchPopover(
-        draftName: $draftName,
-        onCancel: { isPresented = false },
-        onSubmit: { newName in
-          isPresented = false
-          if newName != title.text {
-            onSubmit?(newName)
-          }
-        }
+      .help(
+        AppShortcuts.helpText(
+          title: "Rename branch",
+          commandID: AppShortcuts.CommandID.renameBranch,
+          in: resolvedKeybindings
+        )
       )
-    }
-    .task(id: externalRenamePrompt?.id) {
-      guard let prompt = externalRenamePrompt, title.supportsRename else { return }
-      openRenamePopover()
-      onConsumeExternalRenamePrompt(prompt.id)
+      .modifier(
+        KeyboardShortcutModifier(
+          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.renameBranch)
+        ))
+    } else {
+      // Button wrapper gives folder/workspace the same toolbar padding as the branch button.
+      Button {} label: {
+        labelContent
+      }
     }
   }
 
