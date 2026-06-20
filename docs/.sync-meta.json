@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "40afc8c21b81833844b1667f3f4b101bb34aa183",
-  "last_synced_date": "2026-06-18",
-  "note": "Canvas card title bar now supports right-click context menu (Rename Tab, Change Icon, Close Tab, Close Other/All Tabs in This Worktree) — added to canvas.md. Shelf context menu now shows 'Close Tabs Below' instead of 'Close Tabs to the Right' (label-only, tolerated). PR refresh fixes (#456, #469) and layout restore race fix (#459) are internal behavior fixes, not new features. Toolbar icon fix (#467) cosmetic only."
+  "last_synced_commit": "0a49b5e56295ddf866fd6075a57de42a0a9847b5",
+  "last_synced_date": "2026-06-20",
+  "note": "Workspace creation/removal/child-rows, Qwen agent detection, worktree running indicator, sidebar full-row click and collapse/expand all, CLI debug identity — all already documented in prior syncs. Baseline bump only."
 }
